@@ -1,12 +1,6 @@
 import os
-import sys
-from typing import Dict, List
-
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -14,63 +8,36 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ================== ENV ==================
+# ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = os.getenv("OWNER_ID")
+OWNER_ID = int(os.getenv("OWNER_ID"))
 CATALOG_URL = os.getenv("CATALOG_URL")
 
-if not BOT_TOKEN or not OWNER_ID:
-    sys.exit("FATAL: BOT_TOKEN or OWNER_ID not set")
+if not BOT_TOKEN or not OWNER_ID or not CATALOG_URL:
+    raise RuntimeError("❌ Missing required environment variables")
 
-OWNER_ID = int(OWNER_ID)
-CATALOG_URL = CATALOG_URL or "https://example.com"
-# =========================================
-
+# ================== LOGGING ==================
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
 # ================== DATA ==================
-PRODUCTS: Dict[str, Dict] = {
+PRODUCTS = {
     "p1": {"name": "Товар 1", "price": 10},
     "p2": {"name": "Товар 2", "price": 15},
     "p3": {"name": "Товар 3", "price": 20},
 }
 
-PAYMENT_METHODS = {
-    "cash": "💶 Готівка",
-    "bank": "🏦 Банківський переказ",
-    "paypal": "💳 PayPal",
-}
-# =========================================
-
-
-# ================== HELPERS ==================
-def get_cart(context: ContextTypes.DEFAULT_TYPE) -> List[Dict]:
-    return context.user_data.setdefault("cart", [])
-
-
-def cart_total(cart: List[Dict]) -> int:
-    return sum(item["price"] for item in cart)
-
-
-def format_cart(cart: List[Dict]) -> str:
-    lines = ["🛒 **Ваш кошик:**\n"]
-    for item in cart:
-        lines.append(f"• {item['name']} — {item['price']} €")
-    lines.append(f"\n💰 **Сума:** {cart_total(cart)} €")
-    return "\n".join(lines)
-# ============================================
-
-
 # ================== HANDLERS ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-
     keyboard = [
-        [InlineKeyboardButton("📦 Каталог", url=CATALOG_URL)],
-        [InlineKeyboardButton("🛒 Зробити замовлення", callback_data="menu_order")],
+        [InlineKeyboardButton("📦 Переглянути каталог", url=CATALOG_URL)],
+        [InlineKeyboardButton("🛒 Зробити замовлення", callback_data="order")],
     ]
-
     await update.message.reply_text(
-        "Вітаю! Я бот для прийому замовлень 👋\nОберіть дію:",
+        "Вітаю! Оберіть дію:",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -80,15 +47,12 @@ async def show_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     keyboard = [
-        [
-            InlineKeyboardButton(
-                f"{p['name']} — {p['price']} €",
-                callback_data=f"add_{pid}",
-            )
-        ]
+        [InlineKeyboardButton(
+            f"{p['name']} — {p['price']} €",
+            callback_data=pid,
+        )]
         for pid, p in PRODUCTS.items()
     ]
-    keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="menu_start")])
 
     await query.message.reply_text(
         "Оберіть товар:",
@@ -100,44 +64,28 @@ async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    product_id = query.data.replace("add_", "")
-    product = PRODUCTS.get(product_id)
-
+    product = PRODUCTS.get(query.data)
     if not product:
         await query.message.reply_text("❌ Товар не знайдено")
         return
 
-    cart = get_cart(context)
+    cart = context.user_data.setdefault("cart", [])
     cart.append(product)
 
+    total = sum(item["price"] for item in cart)
+
+    text = "🛒 Ваш кошик:\n"
+    for item in cart:
+        text += f"• {item['name']} — {item['price']} €\n"
+    text += f"\n💰 Сума: {total} €"
+
     keyboard = [
-        [InlineKeyboardButton("➕ Додати ще", callback_data="menu_order")],
-        [InlineKeyboardButton("✅ Оформити", callback_data="checkout")],
+        [InlineKeyboardButton("➕ Додати ще", callback_data="order")],
+        [InlineKeyboardButton("✅ Підтвердити", callback_data="confirm")],
     ]
 
     await query.message.reply_text(
-        format_cart(cart),
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown",
-    )
-
-
-async def checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    cart = get_cart(context)
-    if not cart:
-        await query.message.reply_text("🛒 Кошик порожній")
-        return
-
-    keyboard = [
-        [InlineKeyboardButton(name, callback_data=f"pay_{key}")]
-        for key, name in PAYMENT_METHODS.items()
-    ]
-
-    await query.message.reply_text(
-        "Оберіть спосіб оплати:",
+        text,
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -146,55 +94,35 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    payment_key = query.data.replace("pay_", "")
-    payment = PAYMENT_METHODS.get(payment_key, "Невідомо")
+    cart = context.user_data.get("cart")
+    if not cart:
+        await query.message.reply_text("🛒 Кошик порожній")
+        return
 
-    cart = get_cart(context)
-    total = cart_total(cart)
-    user = update.effective_user
+    total = sum(item["price"] for item in cart)
 
-    text = (
-        "🆕 **НОВЕ ЗАМОВЛЕННЯ**\n\n"
-        f"👤 Клієнт: {user.full_name}\n"
-        f"🆔 ID: {user.id}\n\n"
-    )
-
+    text = "🆕 НОВЕ ЗАМОВЛЕННЯ\n"
+    text += f"👤 Клієнт: {update.effective_user.full_name}\n\n"
     for item in cart:
         text += f"• {item['name']} — {item['price']} €\n"
+    text += f"\n💰 Сума: {total} €"
 
-    text += (
-        f"\n💰 Сума: {total} €"
-        f"\n💳 Оплата: {payment}"
-    )
-
-    await context.bot.send_message(
-        chat_id=OWNER_ID,
-        text=text,
-        parse_mode="Markdown",
-    )
-
-    await query.message.reply_text(
-        "✅ Дякуємо! Замовлення прийнято.\nМи з вами звʼяжемось найближчим часом."
-    )
+    await context.bot.send_message(chat_id=OWNER_ID, text=text)
+    await query.message.reply_text("✅ Замовлення прийнято!")
 
     context.user_data.clear()
-# ============================================
 
-
+# ================== MAIN ==================
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(show_products, pattern="^order$"))
+    app.add_handler(CallbackQueryHandler(confirm_order, pattern="^confirm$"))
+    app.add_handler(CallbackQueryHandler(add_to_cart))
 
-    app.add_handler(CallbackQueryHandler(show_products, pattern="^menu_order$"))
-    app.add_handler(CallbackQueryHandler(start, pattern="^menu_start$"))
-    app.add_handler(CallbackQueryHandler(add_to_cart, pattern="^add_"))
-    app.add_handler(CallbackQueryHandler(checkout, pattern="^checkout$"))
-    app.add_handler(CallbackQueryHandler(confirm_order, pattern="^pay_"))
-
-    print("🤖 Bot started successfully")
+    logger.info("🤖 Bot started successfully")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
