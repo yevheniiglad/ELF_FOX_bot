@@ -1,210 +1,184 @@
-import os
-import logging
+import json
+from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup,
+    InlineKeyboardMarkup
 )
 from telegram.ext import (
-    Application,
+    ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
-    ContextTypes,
+    ContextTypes
 )
 
-# ================== CONFIG ==================
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID"))
+TOKEN = "PASTE_YOUR_BOT_TOKEN_HERE"
+ADMIN_ID = 123456789  # ← ТУТ ТВОЙ TELEGRAM ID
+COURIER_USERNAME = "@managervapeshopdd"
 
-if not BOT_TOKEN or not OWNER_ID:
-    raise RuntimeError("❌ BOT_TOKEN або OWNER_ID не задані")
+# ---------- LOAD CATALOG ----------
+with open("catalog.json", "r", encoding="utf-8") as f:
+    CATALOG = json.load(f)
 
-# ================== LOGGING ==================
-logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+# ---------- HELPERS ----------
+def get_cart(context):
+    return context.user_data.setdefault("cart", [])
 
-# ================== CATALOG ==================
-CATALOG = {
-    "liquids": {
-        "title": "💧 Рідини",
-        "items": {
-            "elfliq": {"name": "ELFLIQ", "price": 18},
-            "chaser": {"name": "CHASER", "price": 20},
-            "hqd": {"name": "HQD PREMIUM", "price": 19},
-        },
-    },
-    "devices": {
-        "title": "📱 Девайси",
-        "items": {
-            "vape10k": {"name": "Багаторазова дудка 10 000 тяг", "price": 25},
-            "vape20k": {"name": "Багаторазова дудка 20 000 тяг", "price": 35},
-        },
-    },
-    "parts": {
-        "title": "🔧 Комплектуючі",
-        "items": {
-            "vaporesso_pod": {
-                "name": "Картриджі Vaporesso",
-                "price": 7,
-            },
-        },
-    },
-}
-
-# ================== HELPERS ==================
-def get_username(user):
-    if user.username:
-        return f"@{user.username}"
-    return "❌ username відсутній"
-
-# ================== HANDLERS ==================
+# ---------- START ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("📦 Каталог", callback_data="catalog")],
-        [InlineKeyboardButton("🛒 Мій кошик", callback_data="cart")],
+        [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
+        [InlineKeyboardButton("ℹ️ Контакти адміністратора", url=COURIER_USERNAME)]
     ]
     await update.message.reply_text(
-        "Вітаю! Оберіть дію:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "Вітаю 👋\nЩо ви хочете замовити?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ---------- CATALOG ----------
+async def catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     keyboard = [
-        [InlineKeyboardButton(cat["title"], callback_data=f"cat:{key}")]
-        for key, cat in CATALOG.items()
+        [InlineKeyboardButton("💧 Рідини", callback_data="category:liquids")],
+        [InlineKeyboardButton("🛒 Кошик", callback_data="cart")]
     ]
-    keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="start")])
-
-    await query.message.reply_text(
+    await query.edit_message_text(
         "Оберіть категорію:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-async def show_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ---------- BRANDS ----------
+async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    cat_key = query.data.split(":")[1]
-    category = CATALOG.get(cat_key)
-
-    if not category:
-        await query.message.reply_text("❌ Категорія не знайдена")
-        return
+    category_key = query.data.split(":")[1]
+    brands = CATALOG["categories"][category_key]["brands"]
 
     keyboard = [
-        [
-            InlineKeyboardButton(
-                f"{item['name']} — {item['price']} €",
-                callback_data=f"add:{cat_key}:{item_key}",
-            )
-        ]
-        for item_key, item in category["items"].items()
+        [InlineKeyboardButton(brand, callback_data=f"brand:{brand}")]
+        for brand in brands
     ]
-
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="catalog")])
 
-    await query.message.reply_text(
-        category["title"],
-        reply_markup=InlineKeyboardMarkup(keyboard),
+    await query.edit_message_text(
+        "Оберіть бренд:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# ---------- FLAVORS ----------
+async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
+    brand = query.data.split(":")[1]
+    context.user_data["current_brand"] = brand
+
+    brand_data = CATALOG["categories"]["liquids"]["brands"][brand]
+    price = brand_data["price"]
+
+    keyboard = [
+        [InlineKeyboardButton(item, callback_data=f"add:{brand}:{item}")]
+        for item in brand_data["items"]
+    ]
+
+    keyboard.append([InlineKeyboardButton("🛒 Кошик", callback_data="cart")])
+    keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="catalog")])
+
+    await query.edit_message_text(
+        f"🔥 {brand}\n💶 Ціна: {price} €\n\nОберіть смак:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ---------- ADD TO CART ----------
 async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    _, cat_key, item_key = query.data.split(":")
-    item = CATALOG[cat_key]["items"][item_key]
-
-    cart = context.user_data.setdefault("cart", [])
-    cart.append(item)
-
-    await query.message.reply_text(
-        f"✅ Додано: {item['name']} ({item['price']} €)",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🛒 Перейти до кошика", callback_data="cart")]]
-        ),
-    )
-
-
-async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    cart = context.user_data.get("cart", [])
-
-    if not cart:
-        await query.message.reply_text("🛒 Кошик порожній")
-        return
-
-    total = sum(item["price"] for item in cart)
-
-    text = "🛒 Ваше замовлення:\n\n"
-    for item in cart:
-        text += f"• {item['name']} — {item['price']} €\n"
-    text += f"\n💰 Разом: {total} €"
+    _, brand, flavor = query.data.split(":", 2)
+    cart = get_cart(context)
+    cart.append(f"{brand} – {flavor}")
 
     keyboard = [
-        [InlineKeyboardButton("✅ Підтвердити", callback_data="confirm")],
-        [InlineKeyboardButton("⬅ Каталог", callback_data="catalog")],
+        [InlineKeyboardButton("➕ Додати ще товар", callback_data=f"brand:{brand}")],
+        [InlineKeyboardButton("🛒 Перейти в кошик", callback_data="cart")]
     ]
 
-    await query.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
+    await query.edit_message_text(
+        f"✅ Додано в кошик:\n{brand} – {flavor}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ---------- CART ----------
+async def cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    cart = context.user_data.get("cart")
+    cart = get_cart(context)
+
     if not cart:
-        await query.message.reply_text("🛒 Кошик порожній")
-        return
+        text = "🛒 Ваш кошик порожній"
+    else:
+        text = "🛒 Ваше замовлення:\n\n" + "\n".join(
+            f"{i+1}. {item}" for i, item in enumerate(cart)
+        )
 
-    user = update.effective_user
-    username = get_username(user)
-    total = sum(item["price"] for item in cart)
+    keyboard = [
+        [InlineKeyboardButton("➕ Додати ще товар", callback_data="catalog")],
+        [InlineKeyboardButton("✅ Оформити замовлення", callback_data="checkout")],
+        [InlineKeyboardButton("❌ Очистити кошик", callback_data="clear_cart")]
+    ]
 
-    text = (
-        "🆕 НОВЕ ЗАМОВЛЕННЯ\n\n"
-        f"👤 Клієнт: {user.full_name}\n"
-        f"🔗 Username: {username}\n\n"
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+# ---------- CLEAR CART ----------
+async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data["cart"] = []
+    await query.edit_message_text("🗑 Кошик очищено")
+
+# ---------- CHECKOUT ----------
+async def checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    cart = get_cart(context)
+
+    order_text = (
+        "📦 НОВЕ ЗАМОВЛЕННЯ\n\n"
+        f"👤 Клієнт: @{user.username}\n"
+        f"ID: {user.id}\n\n"
+        "🛒 Товари:\n" +
+        "\n".join(f"• {item}" for item in cart) +
+        f"\n\n🕒 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     )
 
-    for item in cart:
-        text += f"• {item['name']} — {item['price']} €\n"
+    await context.bot.send_message(chat_id=ADMIN_ID, text=order_text)
 
-    text += f"\n💰 Сума: {total} €"
+    context.user_data["cart"] = []
 
-    await context.bot.send_message(chat_id=OWNER_ID, text=text)
-    await query.message.reply_text("✅ Замовлення прийнято! Ми з вами звʼяжемось.")
+    await query.edit_message_text(
+        f"✅ Дякуємо за замовлення!\n\n"
+        f"Наш курʼєр звʼяжеться з вами:\n{COURIER_USERNAME}"
+    )
 
-    context.user_data.clear()
-
-# ================== MAIN ==================
+# ---------- MAIN ----------
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(start, pattern="^start$"))
-    app.add_handler(CallbackQueryHandler(show_categories, pattern="^catalog$"))
-    app.add_handler(CallbackQueryHandler(show_products, pattern="^cat:"))
+    app.add_handler(CallbackQueryHandler(catalog_menu, pattern="^catalog$"))
+    app.add_handler(CallbackQueryHandler(category_handler, pattern="^category:"))
+    app.add_handler(CallbackQueryHandler(brand_handler, pattern="^brand:"))
     app.add_handler(CallbackQueryHandler(add_to_cart, pattern="^add:"))
-    app.add_handler(CallbackQueryHandler(show_cart, pattern="^cart$"))
-    app.add_handler(CallbackQueryHandler(confirm_order, pattern="^confirm$"))
+    app.add_handler(CallbackQueryHandler(cart_handler, pattern="^cart$"))
+    app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
+    app.add_handler(CallbackQueryHandler(checkout, pattern="^checkout$"))
 
-    logger.info("🤖 Bot запущено успішно")
     app.run_polling()
 
 if __name__ == "__main__":
