@@ -1,91 +1,49 @@
 {
-  "service": {
-    "name": "Vape Catalog",
-    "version": "1.0.0",
-    "currency": "EUR"
-  },
-  "products": [
-    {
-      "brand": "ELFLIQ",
-      "nicotine": "5%",
-      "items": [
-        "APPLE PEACH",
-        "BLACKCURRANT ANISEED",
-        "BLUE RAZZ LEMONADE",
-        "BLUEBERRY",
-        "CHERRY",
-        "PEACH ICE",
-        "PINK GRAPEFRUIT",
-        "RHUBARB SNOOW",
-        "SPEARMINT",
-        "STRAWBERRY ICE",
-        "STRAWBERRY RASPBERRY CHERRY ICE",
-        "STRAWBERRY SNOOW",
-        "APPLE PEAR",
-        "BLUE RAZZ",
-        "BLUEBERRY RASPBERRY POMEGRANATE",
-        "BLUEBERRY ROSE MINT",
-        "CHERRY LEMON PEACH",
-        "COOL MINT",
-        "DOUBLE APPLE",
-        "GRAPE CHERRY",
-        "LEMON LIME",
-        "MANGO PEACH",
-        "PINEAPPLE COLADA",
-        "PINEAPPLE ICE",
-        "PINK LEMONADE SODA",
-        "RASPBERRY LYCHEE",
-        "SOUR WATERMELON GUMMY",
-        "STRAWBERRY BANANA",
-        "STRAWBERRY CHERRY LEMON",
-        "WATERMELON CHERRY"
-      ]
-    },
-    {
-      "brand": "CHASER",
-      "volume": "30 ML",
-      "nicotine": "50 MG",
-      "items": [
-        "KIWI PASSION FRUIT GUAVA",
-        "PEACH TEA",
-        "SOUR APPLE",
-        "STRAWBERRY CREAM",
-        "TROPIC PUNCH",
-        "VITAMIN",
-        "WATERMELON RASPBERRY",
-        "SUNGRIA",
-        "SOUR WATERMELON CANDY",
-        "PEACH YOGURT",
-        "MANGO NECTAR",
-        "BLUEBERRY RASPBERRY",
-        "BLACKBERRY PINK GUAVA",
-        "BLACKBERRY LEMONADE"
-      ]
-    },
-    {
-      "brand": "HQD",
-      "type": "PREMIUM SALT",
-      "volume": "30 ML",
-      "nicotine": "5%",
-      "items": [
-        "CHERRY ICE",
-        "LEMON LIME",
-        "BLUEBERRY LEMONADE",
-        "STRAWBERRY ICE"
-      ]
-    },
-    {
-      "brand": "NASTY",
-      "volume": "30 ML",
-      "nicotine": "50 MG",
-      "items": [
-        "CHERRY COLA",
-        "GRAPE POMEGRANATE",
-        "GRAPE RASPBERRY",
-        "POMEGRANATE BERRY",
-        "RASPBERRY WATERMELON",
-        "WATERMELON STRAWBERRY"
-      ]
+  "currency": "EUR",
+  "categories": {
+    "liquids": {
+      "title": "💧 Рідини",
+      "brands": {
+        "ELFLIQ": {
+          "price": 19,
+          "nicotine": "5%",
+          "items": [
+            "🍎 APPLE PEACH",
+            "🍇 BLACKCURRANT ANISEED",
+            "🫐 BLUE RAZZ LEMONADE",
+            "🫐 BLUEBERRY",
+            "🍒 CHERRY",
+            "❄️ PEACH ICE",
+            "🍊 PINK GRAPEFRUIT",
+            "🌿 SPEARMINT",
+            "🍓 STRAWBERRY ICE",
+            "🍉 WATERMELON CHERRY"
+          ]
+        },
+        "CHASER": {
+          "price": 20,
+          "volume": "30 ML",
+          "nicotine": "50 MG",
+          "items": [
+            "🥝 KIWI PASSION FRUIT GUAVA",
+            "🍑 PEACH TEA",
+            "🍏 SOUR APPLE",
+            "🍓 STRAWBERRY CREAM",
+            "🍉 WATERMELON RASPBERRY"
+          ]
+        },
+        "HQD": {
+          "price": 18,
+          "type": "PREMIUM SALT",
+          "nicotine": "5%",
+          "items": [
+            "🍒 CHERRY ICE",
+            "🍋 LEMON LIME",
+            "🫐 BLUEBERRY LEMONADE",
+            "🍓 STRAWBERRY ICE"
+          ]
+        }
+      }
     }
-  ]
+  }
 }
