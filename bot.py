@@ -12,6 +12,10 @@ from telegram.ext import (
 
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+import os
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
 ADMIN_IDS = [
     int(os.getenv("ADMIN_ID")),
     int(os.getenv("ADMIN_ID1")),
