@@ -6,6 +6,7 @@
       "brands": {
         "ELFLIQ": {
           "price": 19,
+          "volume": "10 ML",
           "nicotine": "5%",
           "items": [
             "🍎 APPLE PEACH",
@@ -34,8 +35,9 @@
         },
         "HQD": {
           "price": 18,
-          "type": "PREMIUM SALT",
+          "volume": "10 ML",
           "nicotine": "5%",
+          "type": "PREMIUM SALT",
           "items": [
             "🍒 CHERRY ICE",
             "🍋 LEMON LIME",
@@ -44,6 +46,68 @@
           ]
         }
       }
+    },
+
+    "devices": {
+      "title": "🔌 Девайси Vaporesso",
+      "items": [
+        {
+          "name": "Vaporesso XROS Mini",
+          "price": 19
+        },
+        {
+          "name": "Vaporesso XROS 2",
+          "price": 24
+        },
+        {
+          "name": "Vaporesso XROS 3",
+          "price": 29
+        },
+        {
+          "name": "Vaporesso Luxe PM40",
+          "price": 49
+        },
+        {
+          "name": "Vaporesso Target PM80",
+          "price": 39
+        }
+      ]
+    },
+
+    "pods": {
+      "title": "🔧 Картриджі Vaporesso",
+      "items": [
+        {
+          "name": "XROS Pod 0.8Ω (1 шт)",
+          "price": 3.5
+        },
+        {
+          "name": "XROS Pod 1.0Ω (1 шт)",
+          "price": 3.5
+        },
+        {
+          "name": "Luxe PM40 Pod (1 шт)",
+          "price": 4
+        },
+        {
+          "name": "Target PM80 Coil (1 шт)",
+          "price": 5.5
+        }
+      ]
+    },
+
+    "vozol": {
+      "title": "🔥 Багаторазові одноразки VOZOL",
+      "items": [
+        {
+          "name": "VOZOL 10K (10 000 тяг)",
+          "price": 12
+        },
+        {
+          "name": "VOZOL 25K (25 000 тяг)",
+          "price": 18
+        }
+      ]
     }
   }
 }
