@@ -6,7 +6,7 @@
       "brands": {
         "ELFLIQ": {
           "price": 19,
-          "volume": "10 ML",
+          "volume": "30 ML",
           "nicotine": "5%",
           "items": [
             "🍎 APPLE PEACH",
@@ -34,8 +34,8 @@
           ]
         },
         "HQD": {
-          "price": 18,
-          "volume": "10 ML",
+          "price": 17,
+          "volume": "30 ML",
           "nicotine": "5%",
           "type": "PREMIUM SALT",
           "items": [
