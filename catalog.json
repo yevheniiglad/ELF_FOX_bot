@@ -9,40 +9,105 @@
           "volume": "30 ML",
           "nicotine": "5%",
           "items": [
-            "🍎 APPLE PEACH",
-            "🍇 BLACKCURRANT ANISEED",
-            "🫐 BLUE RAZZ LEMONADE",
-            "🫐 BLUEBERRY",
-            "🍒 CHERRY",
-            "❄️ PEACH ICE",
-            "🍊 PINK GRAPEFRUIT",
-            "🌿 SPEARMINT",
-            "🍓 STRAWBERRY ICE",
-            "🍉 WATERMELON CHERRY"
+            "🍎 Apple Peach",
+            "🍐 Apple Pear",
+            "🍇 Blackcurrant Aniseed",
+            "🫐 Blue Razz Lemonade",
+            "🫐 Blue Razz",
+            "🫐 Blueberry",
+            "🫐 Blueberry Raspberry Pomegranate",
+            "🫐 Blueberry Rose Mint",
+            "🍒 Cherry",
+            "🍒 Cherry Lemon Peach",
+            "❄️ Peach Ice",
+            "🍊 Pink Grapefruit",
+            "🌱 Rhubarb Snoow",
+            "🌿 Spearmint",
+            "🍓 Strawberry Ice",
+            "🍓 Strawberry Raspberry Cherry Ice",
+            "🍓 Strawberry Snoow",
+            "🍓 Strawberry Banana",
+            "🍓 Strawberry Cherry Lemon",
+            "🍉 Watermelon Cherry",
+            "🍋 Lemon Lime",
+            "🍑 Mango Peach",
+            "🍍 Pineapple Colada",
+            "🍍 Pineapple Ice",
+            "🍹 Pink Lemonade Soda",
+            "🍇 Raspberry Lychee",
+            "🍈 Sour Watermelon Gummy",
+            "🍎 Double Apple",
+            "🍇 Grape Cherry"
           ]
         },
-        "CHASER": {
-          "price": 20,
+        "CHASER LUX": {
           "volume": "30 ML",
           "nicotine": "50 MG",
-          "items": [
-            "🥝 KIWI PASSION FRUIT GUAVA",
-            "🍑 PEACH TEA",
-            "🍏 SOUR APPLE",
-            "🍓 STRAWBERRY CREAM",
-            "🍉 WATERMELON RASPBERRY"
+          "variants": [
+            {
+              "nicotine": "5%",
+              "price": 19,
+              "items": [
+                "🥝 Kiwi Passion Fruit Guava",
+                "🍑 Peach Tea",
+                "🍏 Sour Apple",
+                "🍓 Strawberry Cream",
+                "🍍 Tropic Punch",
+                "🍊 Vitamin",
+                "🍉 Watermelon Raspberry",
+                "🍷 Sungria",
+                "🍈 Sour Watermelon Candy",
+                "🍑 Peach Yogurt",
+                "🥭 Mango Nectar",
+                "🫐 Blueberry Raspberry",
+                "🫐 Blackberry Pink Guava",
+                "🫐 Blackberry Lemonade"
+              ]
+            },
+            {
+              "nicotine": "6.5%",
+              "price": 20,
+              "items": [
+                "🥝 Kiwi Passion Fruit Guava",
+                "🍑 Peach Tea",
+                "🍏 Sour Apple",
+                "🍓 Strawberry Cream",
+                "🍍 Tropic Punch",
+                "🍊 Vitamin",
+                "🍉 Watermelon Raspberry",
+                "🍷 Sungria",
+                "🍈 Sour Watermelon Candy",
+                "🍑 Peach Yogurt",
+                "🥭 Mango Nectar",
+                "🫐 Blueberry Raspberry",
+                "🫐 Blackberry Pink Guava",
+                "🫐 Blackberry Lemonade"
+              ]
+            }
           ]
         },
-        "HQD": {
+        "HQD PREMIUM SALT": {
           "price": 17,
           "volume": "30 ML",
           "nicotine": "5%",
-          "type": "PREMIUM SALT",
           "items": [
-            "🍒 CHERRY ICE",
-            "🍋 LEMON LIME",
-            "🫐 BLUEBERRY LEMONADE",
-            "🍓 STRAWBERRY ICE"
+            "🍒 Cherry Ice",
+            "🍋 Lemon Lime",
+            "🫐 Blueberry Lemonade",
+            "🍓 Strawberry Ice"
+          ]
+        },
+        "NASTY": {
+          "price": 17.5,
+          "volume": "30 ML",
+          "nicotine": "50 MG",
+          "items": [
+            "🥤 Cherry Cola",
+            "🍇 Grape Pomegranate",
+            "🍇 Grape Raspberry",
+            "🍓 Pomegranate Berry",
+            "🍉 Raspberry Watermelon",
+            "🍉 Watermelon Strawberry"
           ]
         }
       }
@@ -51,63 +116,80 @@
     "devices": {
       "title": "🔌 Девайси Vaporesso",
       "items": [
-        {
-          "name": "Vaporesso XROS Mini",
-          "price": 19
-        },
-        {
-          "name": "Vaporesso XROS 2",
-          "price": 24
-        },
-        {
-          "name": "Vaporesso XROS 3",
-          "price": 29
-        },
-        {
-          "name": "Vaporesso Luxe PM40",
-          "price": 49
-        },
-        {
-          "name": "Vaporesso Target PM80",
-          "price": 39
-        }
+        { "name": "XROS 4 Mini", "price": 36 },
+        { "name": "XROS 4 Nano", "price": 45 },
+        { "name": "XROS 5 Mini", "price": 38 },
+        { "name": "XROS 4", "price": 43 },
+        { "name": "XROS 5", "price": 48 },
+        { "name": "XROS Pro (1 покоління)", "price": 50 },
+        { "name": "XROS Pro 2", "price": 52 }
       ]
     },
 
-    "pods": {
-      "title": "🔧 Картриджі Vaporesso",
+    "pods": {"title": "🔧 Картриджі (ціна за 1 шт)",
+      "price_per_item": 8,
       "items": [
-        {
-          "name": "XROS Pod 0.8Ω (1 шт)",
-          "price": 3.5
-        },
-        {
-          "name": "XROS Pod 1.0Ω (1 шт)",
-          "price": 3.5
-        },
-        {
-          "name": "Luxe PM40 Pod (1 шт)",
-          "price": 4
-        },
-        {
-          "name": "Target PM80 Coil (1 шт)",
-          "price": 5.5
-        }
+        "⚙️ 0.4Ω",
+        "⚙️ 0.6Ω",
+        "⚙️ 0.8Ω",
+        "⚙️ 1.0Ω"
       ]
     },
 
-    "vozol": {
-      "title": "🔥 Багаторазові одноразки VOZOL",
+    "elfbar_pods": {
+      "title": "🟣 Elf Bar POD",
       "items": [
-        {
-          "name": "VOZOL 10K (10 000 тяг)",
-          "price": 12
-        },
-        {
-          "name": "VOZOL 25K (25 000 тяг)",
-          "price": 18
-        }
+        { "name": "Elf Bar Pro Pod", "price": 39 },
+        { "name": "Elf Bar Cartridge 0.6Ω", "price": 8 },
+        { "name": "Elf Bar Cartridge 0.8Ω", "price": 8 }
       ]
+    },
+
+    "disposables": {
+      "title": "🔥 Одноразки",
+      "brands": {
+        "VOZOL": {
+          "items": [
+            { "name": "Vozol Gear 10K", "price": 20 },
+            { "name": "Vozol Star 12K", "price": 25 },
+            { "name": "Vozol Vista 20K", "price": 35 },
+            { "name": "Vozol Star 20K", "price": 35 },
+            { "name": "Vozol 40K", "price": 47 }
+          ]
+        },
+        "ELF BAR": {
+          "items": [
+            { "name": "Elf Bar 20K", "price": 36 },
+            { "name": "Elf Bar 23K", "price": 43 },
+            { "name": "Elf Bar Planet 25K", "price": 45 },
+            {
+              "name": "Elf Bar TRIO 40K (🔥 Акція)",
+              "price": 40,
+              "puffs": "40 000",
+              "items": [
+                "🍏 Sour Apple Ice",
+                "🍑 Peach Twist",
+                "🍎 Pomegranate Blast",
+                "❄️ Cool Menthol",
+                "🍍 Pineapple Lime",
+                "🍇 La Grape"
+              ]
+            }
+          ]
+        },
+        "HQD": {
+          "items": [
+            { "name": "HQD 12K", "price": 25 }
+          ]
+        },
+        "WAKA": {
+          "nicotine": "7–9%",
+          "items": [
+            { "name": "Waka 10K", "price": 38 },
+            { "name": "Waka 25K", "price": 48 }
+          ]
+        }
+      }
     }
   }
 }
