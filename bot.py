@@ -245,12 +245,12 @@ async def checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data.clear()
 
-    # 🔑 КЛЮЧОВА ПРАВКА
-    await query.edit_message_reply_markup(reply_markup=None)
+    # 🔑 Головна правка: один виклик edit_message_text з reply_markup=None
     await query.edit_message_text(
         "✅ Дякуємо за замовлення!\n\n"
         "Адміністратор звʼяжеться з вами:\n"
-        f"{COURIER_URL}"
+        f"{COURIER_URL}",
+        reply_markup=None
     )
 
 # ================== ERROR ==================
