@@ -3,41 +3,81 @@
   "categories": {
     "liquids": {
       "title": "💧 Рідини",
-      "items": [
-        { "name": "ELFLIQ 5% – 🍎 Apple Peach", "price": 19 },
-        { "name": "ELFLIQ 5% – 🍐 Apple Pear", "price": 19 },
-        { "name": "ELFLIQ 5% – 🍇 Blackcurrant Aniseed", "price": 19 },
-        { "name": "ELFLIQ 5% – 🫐 Blue Razz Lemonade", "price": 19 },
-        { "name": "ELFLIQ 5% – 🫐 Blueberry", "price": 19 },
-        { "name": "ELFLIQ 5% – 🍒 Cherry", "price": 19 },
-        { "name": "ELFLIQ 5% – ❄️ Peach Ice", "price": 19 },
-        { "name": "ELFLIQ 5% – 🍊 Pink Grapefruit", "price": 19 },
-        { "name": "ELFLIQ 5% – 🌿 Spearmint", "price": 19 },
-        { "name": "ELFLIQ 5% – 🍓 Strawberry Ice", "price": 19 },
-        { "name": "ELFLIQ 5% – 🍉 Watermelon Cherry", "price": 19 },
+      "photo": "photos/liquids.jpg",
+      "brands": {
+        "elfliq": {
+          "title": "🧪 ELFLIQ 5%",
+          "photo": "photos/liquids/elfliq.jpg",
+          "price_range": "19 EUR",
+          "items": [
+            { "name": "🍎 Apple Peach", "price": 19 },
+            { "name": "🍐 Apple Pear", "price": 19 },
+            { "name": "🍇 Blackcurrant Aniseed", "price": 19 },
+            { "name": "🫐 Blue Razz Lemonade", "price": 19 },
+            { "name": "🫐 Blueberry", "price": 19 },
+            { "name": "🍒 Cherry", "price": 19 },
+            { "name": "❄️ Peach Ice", "price": 19 },
+            { "name": "🍊 Pink Grapefruit", "price": 19 },
+            { "name": "🌿 Spearmint", "price": 19 },
+            { "name": "🍓 Strawberry Ice", "price": 19 },
+            { "name": "🍉 Watermelon Cherry", "price": 19 }
+          ]
+        },
 
-        { "name": "CHASER LUX 5% – 🥝 Kiwi Passion Fruit Guava", "price": 19 },
-        { "name": "CHASER LUX 5% – 🍑 Peach Tea", "price": 19 },
-        { "name": "CHASER LUX 5% – 🍏 Sour Apple", "price": 19 },
-        { "name": "CHASER LUX 5% – 🍓 Strawberry Cream", "price": 19 },
+        "chaser": {
+          "title": "⚡ CHASER LUX",
+          "photo": "photos/liquids/chaser.jpg",
+          "items": [
+            {
+              "nicotine": "5%",
+              "price": 19,
+              "items": [
+                "🥝 Kiwi Passion Fruit Guava",
+                "🍑 Peach Tea",
+                "🍏 Sour Apple",
+                "🍓 Strawberry Cream"
+              ]
+            },
+            {
+              "nicotine": "6.5%",
+              "price": 20,
+              "items": [
+                "🥝 Kiwi Passion Fruit Guava",
+                "🍑 Peach Tea",
+                "🍏 Sour Apple",
+                "🍓 Strawberry Cream"
+              ]
+            }
+          ]
+        },
 
-        { "name": "CHASER LUX 6.5% – 🥝 Kiwi Passion Fruit Guava", "price": 20 },
-        { "name": "CHASER LUX 6.5% – 🍑 Peach Tea", "price": 20 },
-        { "name": "CHASER LUX 6.5% – 🍏 Sour Apple", "price": 20 },
-        { "name": "CHASER LUX 6.5% – 🍓 Strawberry Cream", "price": 20 },
+        "hqd": {
+          "title": "💨 HQD Salt 5%",
+          "photo": "photos/liquids/hqd.jpg",
+          "price_range": "17 EUR",
+          "items": [
+            { "name": "🍒 Cherry Ice", "price": 17 },
+            { "name": "🍋 Lemon Lime", "price": 17 },
+            { "name": "🫐 Blueberry Lemonade", "price": 17 }
+          ]
+        },
 
-        { "name": "HQD Salt 5% – 🍒 Cherry Ice", "price": 17 },
-        { "name": "HQD Salt 5% – 🍋 Lemon Lime", "price": 17 },
-        { "name": "HQD Salt 5% – 🫐 Blueberry Lemonade", "price": 17 },
-
-        { "name": "NASTY 50mg – 🥤 Cherry Cola", "price": 17.5 },
-        { "name": "NASTY 50mg – 🍇 Grape Raspberry", "price": 17.5 },
-        { "name": "NASTY 50mg – 🍉 Watermelon Strawberry", "price": 17.5 }
-      ]
+        "nasty": {
+          "title": "🔥 NASTY 50mg",
+          "photo": "photos/liquids/nasty.jpg",
+          "price_range": "17.5 EUR",
+          "items": [
+            { "name": "🥤 Cherry Cola", "price": 17.5 },
+            { "name": "🍇 Grape Raspberry", "price": 17.5 },
+            { "name": "🍉 Watermelon Strawberry", "price": 17.5 }
+          ]
+        }
+      }
     },
 
     "devices": {
       "title": "🔌 Девайси",
+      "photo": "photos/devices.jpg",
       "items": [
         { "name": "Vaporesso XROS 4 Mini", "price": 36 },
         { "name": "Vaporesso XROS 4 Nano", "price": 45 },
@@ -50,6 +90,7 @@
 
     "pods": {
       "title": "🔧 Картриджі",
+      "photo": "photos/pods.jpg",
       "items": [
         { "name": "Картридж 0.4Ω", "price": 8 },
         { "name": "Картридж 0.6Ω", "price": 8 },
@@ -60,6 +101,7 @@
 
     "disposables": {
       "title": "🔥 Одноразки",
+      "photo": "photos/disposables.jpg",
       "items": [
         { "name": "Vozol Gear 10K", "price": 20 },
         { "name": "Vozol Star 12K", "price": 25 },
