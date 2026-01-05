@@ -5,7 +5,8 @@ from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup
+    InlineKeyboardMarkup,
+    InputFile
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -18,7 +19,12 @@ from telegram.ext import (
 
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-COURIER_URL = "https://t.me/managervapeshopdd"
+
+COURIERS = {
+    "Dresden": "@dresden_fox",
+    "Leipzig": "@leipzig_foxs",
+    "DEFAULT": "@courier_fox"
+}
 
 def get_admin_ids():
     ids = []
@@ -27,18 +33,15 @@ def get_admin_ids():
         if val and val.isdigit():
             ids.append(int(val))
     if not ids:
-        raise RuntimeError("❌ ADMIN_ID variables not set correctly")
+        raise RuntimeError("ADMIN_ID not set")
     return ids
 
 ADMIN_IDS = get_admin_ids()
 
-if not BOT_TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN not set")
-
 # ================== LOGGING ==================
 logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    level=logging.INFO
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
 # ================== LOAD CATALOG ==================
@@ -52,103 +55,102 @@ def get_cart(context):
     return context.user_data.setdefault("cart", [])
 
 def cart_total(cart):
-    return round(sum(item["price"] for item in cart), 2)
+    return round(sum(i["price"] for i in cart), 2)
 
 def get_username(user):
     return f"@{user.username}" if user.username else f"id:{user.id}"
 
-# ================== CITY SELECTION ==================
-async def ask_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def get_courier(city: str):
+    return COURIERS.get(city, COURIERS["DEFAULT"])
+
+async def send_photo(chat, photo_path, caption=None):
+    if photo_path and os.path.exists(photo_path):
+        await chat.send_photo(
+            photo=InputFile(photo_path),
+            caption=caption
+        )
+        return True
+    return False
+
+# ================== START / CITY ==================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     keyboard = [
         [InlineKeyboardButton("📍 Берлін", callback_data="city:Berlin")],
         [InlineKeyboardButton("📍 Дрезден", callback_data="city:Dresden")],
         [InlineKeyboardButton("📍 Лейпциг", callback_data="city:Leipzig")],
         [InlineKeyboardButton("✍️ Інше місто", callback_data="city:OTHER")]
     ]
-
     await update.message.reply_text(
         "Звідки ви?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def city_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    city = query.data.split(":")[1]
+    q = update.callback_query
+    await q.answer()
+    city = q.data.split(":")[1]
 
     if city == "OTHER":
         context.user_data["awaiting_city"] = True
-        await query.edit_message_text("✍️ Напишіть ваше місто:")
+        await q.edit_message_text("✍️ Напишіть ваше місто:")
     else:
         context.user_data["city"] = city
-        await show_main_menu(query, context)
+        await show_main_menu(q)
 
 async def city_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("awaiting_city"):
         return
-
     context.user_data["city"] = update.message.text.strip()
-    context.user_data.pop("awaiting_city", None)
-
-    await show_main_menu(update, context)
+    context.user_data.pop("awaiting_city")
+    await show_main_menu(update)
 
 # ================== MAIN MENU ==================
-async def show_main_menu(update_or_query, context):
+async def show_main_menu(update_or_query):
     keyboard = [
-        [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
-        [InlineKeyboardButton("ℹ️ Контакт адміністратора", url=COURIER_URL)]
+        [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")]
     ]
-
     text = "Вітаю 👋\nОберіть дію:"
-
     if hasattr(update_or_query, "edit_message_text"):
         await update_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         await update_or_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ================== START ==================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await ask_city(update, context)
-
 # ================== CATALOG ==================
 async def catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    q = update.callback_query
+    await q.answer()
 
     keyboard = []
     for key, data in CATALOG["categories"].items():
-        keyboard.append([
-            InlineKeyboardButton(data["title"], callback_data=f"category:{key}")
-        ])
+        keyboard.append([InlineKeyboardButton(data["title"], callback_data=f"category:{key}")])
 
     keyboard.append([InlineKeyboardButton("🛒 Кошик", callback_data="cart")])
-    keyboard.append([InlineKeyboardButton("⬅ На головну", callback_data="start")])
 
-    await query.edit_message_text(
+    await q.edit_message_text(
         "Оберіть категорію:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 # ================== CATEGORY ==================
 async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    q = update.callback_query
+    await q.answer()
+    category = q.data.split(":")[1]
+    cat = CATALOG["categories"][category]
 
-    category = query.data.split(":")[1]
-    context.user_data["category"] = category
+    if cat.get("photo"):
+        await send_photo(q.message.chat, cat["photo"], cat["title"])
 
-    cat_data = CATALOG["categories"][category]
     keyboard = []
 
-    if "brands" in cat_data:
-        for brand in cat_data["brands"]:
+    if "brands" in cat:
+        for brand in cat["brands"]:
             keyboard.append([
                 InlineKeyboardButton(brand, callback_data=f"brand:{category}:{brand}")
             ])
     else:
-        for item in cat_data["items"]:
+        for item in cat["items"]:
             keyboard.append([
                 InlineKeyboardButton(
                     f"{item['name']} — {item['price']} {CURRENCY}",
@@ -158,21 +160,24 @@ async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="catalog")])
 
-    await query.edit_message_text(
-        f"{cat_data['title']}\nОберіть товар:",
+    await q.message.reply_text(
+        "Оберіть:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 # ================== BRAND ==================
 async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    q = update.callback_query
+    await q.answer()
+    _, category, brand = q.data.split(":", 2)
 
-    _, category, brand = query.data.split(":", 2)
-    brand_data = CATALOG["categories"][category]["brands"][brand]
+    data = CATALOG["categories"][category]["brands"][brand]
+
+    if data.get("photo"):
+        await send_photo(q.message.chat, data["photo"], f"{brand} — {data['price']} {CURRENCY}")
 
     keyboard = []
-    for flavor in brand_data["items"]:
+    for flavor in data["items"]:
         keyboard.append([
             InlineKeyboardButton(
                 flavor,
@@ -183,38 +188,30 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("🛒 Кошик", callback_data="cart")])
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"category:{category}")])
 
-    info = f"{brand}\n💶 {brand_data['price']} {CURRENCY}"
-    if "nicotine" in brand_data:
-        info += f"\nНікотин: {brand_data['nicotine']}"
-    if "volume" in brand_data:
-        info += f"\nОбʼєм: {brand_data['volume']}"
-
-    await query.edit_message_text(
-        info + "\n\nОберіть смак:",
+    await q.message.reply_text(
+        "Оберіть смак:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 # ================== ADD TO CART ==================
 async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    parts = query.data.split(":")
-    category = parts[1]
+    q = update.callback_query
+    await q.answer()
+    parts = q.data.split(":")
     cart = get_cart(context)
 
     if len(parts) == 4:
-        _, _, brand, flavor = parts
+        _, category, brand, flavor = parts
         price = CATALOG["categories"][category]["brands"][brand]["price"]
         name = f"{brand} — {flavor}"
     else:
-        _, _, name = parts
-        items = CATALOG["categories"][category]["items"]
-        price = next(i["price"] for i in items if i["name"] == name)
+        _, category, name = parts
+        item = next(i for i in CATALOG["categories"][category]["items"] if i["name"] == name)
+        price = item["price"]
 
     cart.append({"name": name, "price": price})
 
-    await query.edit_message_text(
+    await q.edit_message_text(
         f"✅ Додано:\n{name}\n💶 {price} {CURRENCY}",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("➕ Додати ще", callback_data="catalog")],
@@ -224,22 +221,19 @@ async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================== CART ==================
 async def cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
+    q = update.callback_query
+    await q.answer()
     cart = get_cart(context)
 
     if not cart:
-        text = "🛒 Кошик порожній"
-    else:
-        lines = [
-            f"{i+1}. {item['name']} — {item['price']} {CURRENCY}"
-            for i, item in enumerate(cart)
-        ]
-        text = "🛒 Ваше замовлення:\n\n" + "\n".join(lines)
-        text += f"\n\n💰 Разом: {cart_total(cart)} {CURRENCY}"
+        await q.edit_message_text("🛒 Кошик порожній")
+        return
 
-    await query.edit_message_text(
+    text = "🛒 Ваше замовлення:\n\n"
+    text += "\n".join(f"• {i['name']} — {i['price']} {CURRENCY}" for i in cart)
+    text += f"\n\n💰 Разом: {cart_total(cart)} {CURRENCY}"
+
+    await q.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("➕ Додати ще", callback_data="catalog")],
@@ -248,54 +242,43 @@ async def cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ================== CLEAR CART ==================
 async def clear_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    q = update.callback_query
+    await q.answer()
     context.user_data["cart"] = []
-    await query.edit_message_text("🗑 Кошик очищено")
+    await q.edit_message_text("🗑 Кошик очищено")
 
 # ================== CHECKOUT ==================
 async def checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    q = update.callback_query
+    await q.answer()
 
-    user = query.from_user
+    user = q.from_user
     cart = get_cart(context)
-
-    if not cart:
-        await query.edit_message_text("🛒 Кошик порожній")
-        return
-
     city = context.user_data.get("city", "Невідомо")
-    total = cart_total(cart)
+    courier = get_courier(city)
 
-    order_text = (
+    text = (
         "📦 НОВЕ ЗАМОВЛЕННЯ\n\n"
         f"👤 Клієнт: {get_username(user)}\n"
         f"ID: {user.id}\n"
         f"📍 Місто: {city}\n\n"
         "🛒 Товари:\n" +
         "\n".join(f"• {i['name']} — {i['price']} {CURRENCY}" for i in cart) +
-        f"\n\n💰 Разом: {total} {CURRENCY}"
+        f"\n\n💰 Разом: {cart_total(cart)} {CURRENCY}"
         f"\n🕒 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     )
 
-    for admin_id in ADMIN_IDS:
-        await context.bot.send_message(chat_id=admin_id, text=order_text)
+    for admin in ADMIN_IDS:
+        await context.bot.send_message(admin, text)
 
     context.user_data.clear()
 
-    await query.edit_message_text(
+    await q.edit_message_text(
         "✅ Дякуємо за замовлення!\n\n"
-        "Адміністратор звʼяжеться з вами:\n"
-        f"{COURIER_URL}",
-        reply_markup=None
+        "Курʼєр звʼяжеться з вами:\n"
+        f"{courier}"
     )
-
-# ================== ERROR ==================
-async def error_handler(update, context):
-    logging.error("ERROR", exc_info=context.error)
 
 # ================== MAIN ==================
 def main():
@@ -305,7 +288,6 @@ def main():
     app.add_handler(CallbackQueryHandler(city_handler, pattern="^city:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, city_text_handler))
 
-    app.add_handler(CallbackQueryHandler(show_main_menu, pattern="^start$"))
     app.add_handler(CallbackQueryHandler(catalog_menu, pattern="^catalog$"))
     app.add_handler(CallbackQueryHandler(category_handler, pattern="^category:"))
     app.add_handler(CallbackQueryHandler(brand_handler, pattern="^brand:"))
@@ -314,7 +296,6 @@ def main():
     app.add_handler(CallbackQueryHandler(clear_cart, pattern="^clear_cart$"))
     app.add_handler(CallbackQueryHandler(checkout, pattern="^checkout$"))
 
-    app.add_error_handler(error_handler)
     app.run_polling()
 
 if __name__ == "__main__":
