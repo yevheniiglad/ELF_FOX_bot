@@ -17,16 +17,6 @@ from telegram.ext import (
     filters
 )
 
-async def send_photo(bot, chat_id, photo, caption=None):
-    if not photo:
-        return
-    await bot.send_photo(
-        chat_id=chat_id,
-        photo=photo,
-        caption=caption
-    )
-
-
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -63,6 +53,18 @@ with open("catalog.json", "r", encoding="utf-8") as f:
 CURRENCY = CATALOG.get("currency", "EUR")
 
 # ================== HELPERS ==================
+async def send_photo(bot, chat_id, photo, caption=None):
+    if not photo:
+        return
+    try:
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption=caption
+        )
+    except Exception as e:
+        logging.warning(f"Не вдалося надіслати фото: {e}")
+
 def get_cart(context: ContextTypes.DEFAULT_TYPE):
     return context.user_data.setdefault("cart", [])
 
