@@ -17,6 +17,16 @@ from telegram.ext import (
     filters
 )
 
+async def send_photo(bot, chat_id, photo, caption=None):
+    if not photo:
+        return
+    await bot.send_photo(
+        chat_id=chat_id,
+        photo=photo,
+        caption=caption
+    )
+
+
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
