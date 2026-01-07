@@ -5,8 +5,7 @@ from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    InputFile
+    InlineKeyboardMarkup
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -16,16 +15,6 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-
-async def send_photo(bot, chat_id, photo, caption=None):
-    if not photo:
-        return
-    await bot.send_photo(
-        chat_id=chat_id,
-        photo=photo,
-        caption=caption
-    )
-
 
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -75,23 +64,18 @@ def get_username(user):
 def get_courier_for_city(city: str):
     return COURIERS.get(city, COURIERS["DEFAULT"])
 
-async def safe_send_photo(message_or_chat, path: str, caption: str | None = None):
-    """Send photo if file exists. message_or_chat can be a Message object or Chat object."""
-    if not path:
-        return False
-    if not os.path.exists(path):
-        logging.warning("Photo not found: %s", path)
-        return False
+# ✅ ЄДИНА ПРАВИЛЬНА ФУНКЦІЯ ДЛЯ ФОТО (URL)
+async def send_photo(bot, chat_id, photo, caption=None):
+    if not photo:
+        return
     try:
-        # If message_or_chat has reply_photo (Message), prefer that
-        if hasattr(message_or_chat, "reply_photo"):
-            await message_or_chat.reply_photo(photo=InputFile(path), caption=caption)
-        else:
-            await message_or_chat.send_photo(photo=InputFile(path), caption=caption)
-        return True
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption=caption
+        )
     except Exception as e:
-        logging.exception("Failed to send photo %s: %s", path, e)
-        return False
+        logging.warning(f"Не вдалося надіслати фото: {e}")
 
 # ================== START & CITY SELECTION ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
