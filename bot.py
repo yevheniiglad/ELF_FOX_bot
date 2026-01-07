@@ -77,20 +77,35 @@ def get_username(user):
 def get_courier_for_city(city: str):
     return COURIERS.get(city, COURIERS["DEFAULT"])
 
-async def safe_send_photo(message_or_chat, path: str, caption: str | None = None):
-    """Send photo if file exists. message_or_chat can be a Message object or Chat object."""
+async def safe_send_photo(message_or_chat, path: str | None, caption: str | None = None):
+    """
+    Universal function to send photo.
+    Supports:
+    - URL (http:// or https://)
+    - Local file path
+    - Message or Chat objects
+    """
     if not path:
         return False
-    if not os.path.exists(path):
-        logging.warning("Photo not found: %s", path)
-        return False
     try:
-        # If message_or_chat has reply_photo (Message), prefer that
-        if hasattr(message_or_chat, "reply_photo"):
-            await message_or_chat.reply_photo(photo=InputFile(path), caption=caption)
+        if path.startswith("http://") or path.startswith("https://"):
+            # URL case
+            if hasattr(message_or_chat, "reply_photo"):
+                await message_or_chat.reply_photo(photo=path, caption=caption)
+            else:
+                await message_or_chat.send_photo(photo=path, caption=caption)
+            return True
+        elif os.path.exists(path):
+            # Local file case
+            file = InputFile(path)
+            if hasattr(message_or_chat, "reply_photo"):
+                await message_or_chat.reply_photo(photo=file, caption=caption)
+            else:
+                await message_or_chat.send_photo(photo=file, caption=caption)
+            return True
         else:
-            await message_or_chat.send_photo(photo=InputFile(path), caption=caption)
-        return True
+            logging.warning("Photo not found: %s", path)
+            return False
     except Exception as e:
         logging.exception("Failed to send photo %s: %s", path, e)
         return False
