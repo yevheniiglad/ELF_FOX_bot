@@ -273,24 +273,113 @@ async def cart_view_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await q.edit_message_text(text)
 
+# ================== CART VIEW ==================
+async def cart_view_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+
+    cart = get_cart(context)
+    if not cart:
+        await q.edit_message_text("🛒 Кошик порожній")
+        return
+
+    lines = [f"{i+1}. {item['name']} — {item['price']} {CURRENCY}" for i, item in enumerate(cart)]
+    text = "🛒 Ваше замовлення:\n\n" + "\n".join(lines)
+    text += f"\n\n💰 Разом: {cart_total(cart)} {CURRENCY}"
+
+    kb = [
+        [InlineKeyboardButton("➕ Додати ще", callback_data="catalog")],
+        [InlineKeyboardButton("✅ Оформити", callback_data="checkout")],
+        [InlineKeyboardButton("❌ Очистити", callback_data="clear_cart")]
+    ]
+
+    await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
+
+# ================== CLEAR CART ==================
+async def clear_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    context.user_data["cart"] = []
+    await q.edit_message_text("🗑 Кошик очищено")
+
+# ================== CHECKOUT ==================
+async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+
+    user = q.from_user
+    cart = get_cart(context)
+    if not cart:
+        await q.edit_message_text("🛒 Кошик порожній")
+        return
+
+    city = context.user_data.get("city", "Невідомо")
+    timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    # Build admin message
+    admin_text = (
+        "📦 НОВЕ ЗАМОВЛЕННЯ\n\n"
+        f"👤 Клієнт: {get_username(user)}\n"
+        f"ID: {user.id}\n"
+        f"📍 Місто: {city}\n\n"
+        "🛒 Товари:\n" +
+        "\n".join(f"• {i['name']} — {i['price']} {CURRENCY}" for i in cart) +
+        f"\n\n💰 Разом: {cart_total(cart)} {CURRENCY}\n"
+        f"🕒 {timestamp}"
+    )
+
+    # send to all admins
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_message(chat_id=admin_id, text=admin_text)
+        except Exception as e:
+            logging.exception("Failed to send order to admin %s: %s", admin_id, e)
+
+    # Prepare courier message for client
+    courier = get_courier_for_city(city)
+
+    # clear user data (keeps history if needed, but clear cart + city)
+    context.user_data.pop("cart", None)
+    # keep city if you want; currently remove to require reselect if needed:
+    # context.user_data.pop("city", None)
+
+    await q.edit_message_text(
+        "✅ Дякуємо за замовлення!\n\n"
+        "Курʼєр звʼяжеться з вами:\n"
+        f"{courier}"
+    )
+
+# ================== ERROR HANDLER ==================
+async def error_handler(update, context):
+    logging.error("Exception in handler", exc_info=context.error)
+
 # ================== MAIN ==================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Start / city
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(city_callback_handler, pattern="^city:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, city_text_handler))
 
+    # Main menu & catalog
     app.add_handler(CallbackQueryHandler(show_main_menu, pattern="^start$"))
     app.add_handler(CallbackQueryHandler(catalog_menu, pattern="^catalog$"))
     app.add_handler(CallbackQueryHandler(category_handler, pattern="^category:"))
+
+    # Brands, nicotine and adding
     app.add_handler(CallbackQueryHandler(brand_handler, pattern="^brand:"))
     app.add_handler(CallbackQueryHandler(nicotine_handler, pattern="^nic:"))
-    app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern="^(addb:|addn:)"))
+    app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern="^(add:|addb:|addn:)"))
+
+    # Cart / clear / checkout
     app.add_handler(CallbackQueryHandler(cart_view_handler, pattern="^cart$"))
+    app.add_handler(CallbackQueryHandler(clear_cart_handler, pattern="^clear_cart$"))
+    app.add_handler(CallbackQueryHandler(checkout_handler, pattern="^checkout$"))
+
+    app.add_error_handler(error_handler)
 
     logging.info("Bot starting...")
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
