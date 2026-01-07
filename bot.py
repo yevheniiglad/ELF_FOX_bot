@@ -5,7 +5,8 @@ from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup
+    InlineKeyboardMarkup,
+    InputFile
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,6 +16,16 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+
+async def send_photo(bot, chat_id, photo, caption=None):
+    if not photo:
+        return
+    await bot.send_photo(
+        chat_id=chat_id,
+        photo=photo,
+        caption=caption
+    )
+
 
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -64,21 +75,27 @@ def get_username(user):
 def get_courier_for_city(city: str):
     return COURIERS.get(city, COURIERS["DEFAULT"])
 
-# ✅ ЄДИНА ПРАВИЛЬНА ФУНКЦІЯ ДЛЯ ФОТО (URL)
-async def send_photo(bot, chat_id, photo, caption=None):
-    if not photo:
-        return
+async def safe_send_photo(message_or_chat, path: str, caption: str | None = None):
+    """Send photo if file exists. message_or_chat can be a Message object or Chat object."""
+    if not path:
+        return False
+    if not os.path.exists(path):
+        logging.warning("Photo not found: %s", path)
+        return False
     try:
-        await bot.send_photo(
-            chat_id=chat_id,
-            photo=photo,
-            caption=caption
-        )
+        # If message_or_chat has reply_photo (Message), prefer that
+        if hasattr(message_or_chat, "reply_photo"):
+            await message_or_chat.reply_photo(photo=InputFile(path), caption=caption)
+        else:
+            await message_or_chat.send_photo(photo=InputFile(path), caption=caption)
+        return True
     except Exception as e:
-        logging.warning(f"Не вдалося надіслати фото: {e}")
+        logging.exception("Failed to send photo %s: %s", path, e)
+        return False
 
-# ================== START & CITY ==================
+# ================== START & CITY SELECTION ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # clear only relevant user state (keep history if needed)
     context.user_data.clear()
     keyboard = [
         [InlineKeyboardButton("📍 Берлін", callback_data="city:Berlin")],
@@ -86,10 +103,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📍 Лейпциг", callback_data="city:Leipzig")],
         [InlineKeyboardButton("✍️ Інше місто", callback_data="city:OTHER")],
     ]
-    await update.message.reply_text(
-        "Звідки ви?",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    if update.message:
+        await update.message.reply_text("Звідки ви?", reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        # fallback for callback-based start
+        await update.callback_query.edit_message_text("Звідки ви?", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def city_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -98,180 +116,187 @@ async def city_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     if city == "OTHER":
         context.user_data["awaiting_city"] = True
-        await q.edit_message_text("✍️ Напишіть назву міста:")
+        await q.edit_message_text("✍️ Напишіть, будь ласка, назву вашого міста:")
     else:
         context.user_data["city"] = city
-        await show_main_menu(q)
+        # show main menu
+        await show_main_menu(q, context)
 
 async def city_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("awaiting_city"):
-        context.user_data["city"] = update.message.text.strip()
-        context.user_data.pop("awaiting_city", None)
-        await show_main_menu(update)
+    if not context.user_data.get("awaiting_city"):
+        return
+    context.user_data["city"] = update.message.text.strip()
+    context.user_data.pop("awaiting_city", None)
+    await show_main_menu(update, context)
 
 # ================== MAIN MENU ==================
-async def show_main_menu(update_or_query):
+async def show_main_menu(update_or_query, context: ContextTypes.DEFAULT_TYPE | None = None):
     kb = [
         [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
         [InlineKeyboardButton("🛒 Кошик", callback_data="cart")]
     ]
     text = "Вітаю 👋\nОберіть дію:"
+    # update_or_query may be Message or CallbackQuery
     if hasattr(update_or_query, "edit_message_text"):
         await update_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
-    else:
+    elif hasattr(update_or_query, "message"):
         await update_or_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
+    else:
+        # fallback: use context to send to chat if available
+        logging.warning("show_main_menu: unknown update type")
 
-# ================== CATALOG ==================
+# ================== CATALOG: categories list ==================
 async def catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
 
-    keyboard = [
-        [InlineKeyboardButton(cat["title"], callback_data=f"category:{key}")]
-        for key, cat in CATALOG["categories"].items()
-    ]
-    keyboard.append([InlineKeyboardButton("⬅ На головну", callback_data="start")])
+    keyboard = []
+    for cat_key, cat_data in CATALOG["categories"].items():
+        keyboard.append([InlineKeyboardButton(cat_data["title"], callback_data=f"category:{cat_key}")])
 
-    await q.edit_message_text(
-        "Оберіть категорію:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    keyboard.append([InlineKeyboardButton("⬅ На головну", callback_data="start")])
+    await q.edit_message_text("Оберіть категорію:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # ================== CATEGORY ==================
 async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     cat_key = q.data.split(":", 1)[1]
-    cat = CATALOG["categories"][cat_key]
+    if cat_key not in CATALOG["categories"]:
+        await q.edit_message_text("Вибрана категорія не знайдена.")
+        return
 
-    keyboard = [
-        [InlineKeyboardButton(
-            brand.get("title", brand_key),
-            callback_data=f"brand:{cat_key}:{brand_key}"
-        )]
-        for brand_key, brand in cat["brands"].items()
-    ]
+    cat = CATALOG["categories"][cat_key]
+    # send category photo (if present)
+    await safe_send_photo(q.message, cat.get("photo"), caption=cat.get("title"))
+
+    keyboard = []
+    # If category has brands -> show brands
+    if "brands" in cat:
+        for brand_key, brand in cat["brands"].items():
+            label = brand.get("title", brand_key)
+            keyboard.append([InlineKeyboardButton(label, callback_data=f"brand:{cat_key}:{brand_key}")])
+    else:
+        # flat items
+        for idx, item in enumerate(cat.get("items", [])):
+            # item expected to be { "name": "...", "price": N }
+            label = f"{item['name']} — {item['price']} {CURRENCY}"
+            keyboard.append([InlineKeyboardButton(label, callback_data=f"add:{cat_key}:{idx}")])
 
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="catalog")])
+    # reply with options
+    await q.message.reply_text("Оберіть:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    await q.message.reply_text(
-        "Оберіть товар:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# ================== BRAND (ФОТО + СМАКИ) ==================
+# ================== BRAND ==================
 async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-
     _, cat_key, brand_key = q.data.split(":", 2)
-    brand = CATALOG["categories"][cat_key]["brands"][brand_key]
 
-    caption = brand.get("title", "")
-    if brand.get("price_range"):
-        caption += f"\n{brand['price_range']}"
+    cat = CATALOG["categories"].get(cat_key)
+    if not cat or "brands" not in cat or brand_key not in cat["brands"]:
+        await q.edit_message_text("Бренд не знайдено.")
+        return
 
-    # ✅ ФОТО БРЕНДУ (URL)
-    await send_photo(
-        bot=context.bot,
-        chat_id=q.message.chat.id,
-        photo=brand.get("photo"),
-        caption=caption
-    )
+    brand = cat["brands"][brand_key]
+    # send brand photo if exists
+    caption = brand.get("title")
+    # if brand has price_range show it in caption
+    pr = brand.get("price_range")
+    if pr:
+        caption = f"{caption}\n{pr}"
+    await safe_send_photo(q.message, brand.get("photo"), caption=caption)
 
     keyboard = []
     items = brand.get("items", [])
 
-    # Прямі смаки (ELFLIQ, HQD, NASTY)
-    if items and isinstance(items[0], dict) and "name" in items[0]:
-        for idx, it in enumerate(items):
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{it['name']} — {it['price']} {CURRENCY}",
-                    callback_data=f"addb:{cat_key}:{brand_key}:{idx}"
-                )
-            ])
-    # Блоки нікотину (CHASER)
-    else:
-        for idx, block in enumerate(items):
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{block['nicotine']} — {block['price']} {CURRENCY}",
-                    callback_data=f"nic:{cat_key}:{brand_key}:{idx}"
-                )
-            ])
+    # Two possible shapes:
+    # 1) list of dicts with 'name' and 'price' -> direct flavors
+    # 2) list of blocks { "nicotine": "...", "price": N, "items": [flavors...] } -> nicotine choices
+    if items:
+        first = items[0]
+        if isinstance(first, dict) and "nicotine" in first and "items" in first:
+            # nicotine blocks
+            for idx, block in enumerate(items):
+                label = f"{block.get('nicotine')} — {block.get('price')} {CURRENCY}"
+                keyboard.append([InlineKeyboardButton(label, callback_data=f"nic:{cat_key}:{brand_key}:{idx}")])
+        elif isinstance(first, dict) and "name" in first:
+            # direct items are objects with name & price
+            for idx, it in enumerate(items):
+                label = f"{it['name']} — {it['price']} {CURRENCY}"
+                keyboard.append([InlineKeyboardButton(label, callback_data=f"addb:{cat_key}:{brand_key}:{idx}")])
+        else:
+            # fallback: treat as list of strings (unlikely in provided JSON)
+            for idx, name in enumerate(items):
+                label = name
+                keyboard.append([InlineKeyboardButton(label, callback_data=f"addb:{cat_key}:{brand_key}:{idx}")])
 
+    keyboard.append([InlineKeyboardButton("🛒 Кошик", callback_data="cart")])
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"category:{cat_key}")])
 
-    await q.message.reply_text(
-        "Оберіть:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await q.message.reply_text("Оберіть:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ================== NICOTINE ==================
+# ================== NICOTINE (block) ==================
 async def nicotine_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-
     _, cat_key, brand_key, block_idx = q.data.split(":", 3)
-    block = CATALOG["categories"][cat_key]["brands"][brand_key]["items"][int(block_idx)]
 
-    keyboard = [
-        [InlineKeyboardButton(flavor, callback_data=f"addn:{cat_key}:{brand_key}:{block_idx}:{i}")]
-        for i, flavor in enumerate(block["items"])
-    ]
+    brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+    block = brand["items"][int(block_idx)]
+
+    keyboard = []
+    for idx, flavor in enumerate(block["items"]):
+        label = flavor
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"addn:{cat_key}:{brand_key}:{block_idx}:{idx}")])
+
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"brand:{cat_key}:{brand_key}")])
+    await q.message.reply_text("Оберіть смак:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    await q.message.reply_text(
-        "Оберіть смак:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# ================== ADD TO CART ==================
+# ================== ADD TO CART (uniform, index-based) ==================
 async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    parts = q.data.split(":")
+    data = q.data
+    parts = data.split(":")
+
     cart = get_cart(context)
 
-    if parts[0] == "addb":
-        _, cat, brand, idx = parts
-        item = CATALOG["categories"][cat]["brands"][brand]["items"][int(idx)]
+    if parts[0] == "add":
+        # top-level category item: add:{cat}:{idx}
+        _, cat_key, idx = parts
+        idx = int(idx)
+        item = CATALOG["categories"][cat_key]["items"][idx]
         cart.append({"name": item["name"], "price": item["price"]})
 
-    elif parts[0] == "addn":
-        _, cat, brand, bidx, fidx = parts
-        block = CATALOG["categories"][cat]["brands"][brand]["items"][int(bidx)]
-        flavor = block["items"][int(fidx)]
-        cart.append({
-            "name": f"{brand} {block['nicotine']} — {flavor}",
-            "price": block["price"]
-        })
+    elif parts[0] == "addb":
+        # brand item with name/price objects: addb:{cat}:{brand}:{idx}
+        _, cat_key, brand_key, idx = parts
+        idx = int(idx)
+        item = CATALOG["categories"][cat_key]["brands"][brand_key]["items"][idx]
+        cart.append({"name": f"{item['name']}", "price": item["price"]})
 
+    elif parts[0] == "addn":
+        # addn:{cat}:{brand}:{block_idx}:{flavor_idx}
+        _, cat_key, brand_key, block_idx, flavor_idx = parts
+        block_idx = int(block_idx); flavor_idx = int(flavor_idx)
+        block = CATALOG["categories"][cat_key]["brands"][brand_key]["items"][block_idx]
+        flavor = block["items"][flavor_idx]
+        price = block["price"]
+        # Compose readable name
+        cart.append({"name": f"{CATALOG['categories'][cat_key]['brands'][brand_key].get('title','') } {block.get('nicotine')} — {flavor}", "price": price})
+    else:
+        await q.edit_message_text("Невідома дія.")
+        return
+
+    # acknowledge and present quick options
     await q.edit_message_text(
-        f"✅ Додано:\n{cart[-1]['name']} — {cart[-1]['price']} {CURRENCY}",
+        f"✅ Додано: {cart[-1]['name']}\n💶 {cart[-1]['price']} {CURRENCY}",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Ще", callback_data="catalog")],
+            [InlineKeyboardButton("➕ Додати ще", callback_data="catalog")],
             [InlineKeyboardButton("🛒 Кошик", callback_data="cart")]
         ])
     )
-
-# ================== CART ==================
-async def cart_view_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-
-    cart = get_cart(context)
-    if not cart:
-        await q.edit_message_text("🛒 Кошик порожній")
-        return
-
-    text = "🛒 Ваше замовлення:\n\n"
-    for i, item in enumerate(cart, 1):
-        text += f"{i}. {item['name']} — {item['price']} {CURRENCY}\n"
-    text += f"\n💰 Разом: {cart_total(cart)} {CURRENCY}"
-
-    await q.edit_message_text(text)
 
 # ================== CART VIEW ==================
 async def cart_view_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -383,3 +408,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
+    main()
