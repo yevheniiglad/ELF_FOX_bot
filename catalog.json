@@ -25,7 +25,7 @@
         },
         "chaser": {
           "title": "⚡ CHASER LUX",
-          "photo": "photos/liquids/chaser.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/chaser_lux.jpg",
           "items": [
             {
               "nicotine": "5%",
@@ -51,7 +51,7 @@
         },
         "hqd": {
           "title": "💨 HQD Salt 5%",
-          "photo": "photos/liquids/hqd.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/hqd_liquid.jpg",
           "price_range": "17 EUR",
           "items": [
             { "name": "🍒 Cherry Ice", "price": 17 },
@@ -61,7 +61,7 @@
         },
         "nasty": {
           "title": "🔥 NASTY 50mg",
-          "photo": "photos/liquids/nasty.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/nasty.jpg",
           "price_range": "17.5 EUR",
           "items": [
             { "name": "🥤 Cherry Cola", "price": 17.5 },
@@ -74,9 +74,9 @@
 
     "devices": {
       "title": "🔌 Девайси",
-      "photo": "photos/devices.jpg",
       "items": [
-        { "name": "Vaporesso XROS 4 Mini", "price": 36 },
+        { "name": "Vaporesso XROS 4 Mini", "price": 36
+        "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_Mini.jpg",},
         { "name": "Vaporesso XROS 4 Nano", "price": 45 },
         { "name": "Vaporesso XROS 5 Mini", "price": 38 },
         { "name": "Vaporesso XROS 5", "price": 48 },
@@ -87,7 +87,7 @@
 
     "pods": {
       "title": "🔧 Картриджі",
-      "photo": "photos/pods.jpg",
+      "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/pods.jpg",
       "items": [
         { "name": "Картридж 0.4Ω", "price": 8 },
         { "name": "Картридж 0.6Ω", "price": 8 },
@@ -103,8 +103,10 @@
         "vozol": {
           "title": "VOZOL",
           "items": [
-            { "name": "Vozol Gear 10K", "price": 20 },
-            { "name": "Vozol Star 12K", "price": 25 },
+            { "name": "Vozol Gear 10K", "price": 20
+            "photo":"https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Gear.jpg"},
+            { "name": "Vozol Star 12K", "price": 25
+             "photo":"https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Star.jpg"},
             { "name": "Vozol Vista 20K", "price": 35 },
             { "name": "Vozol 40K", "price": 47 }
           ]
@@ -119,6 +121,7 @@
         },
         "elfbar_trio": {
           "title": "ELF BAR TRIO",
+          "photo":"https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/ELF_BAR_TRIO_40K.jpg"
           "items": [
             { "name": "🍏 Sour Apple Ice", "price": 40 },
             { "name": "🍑 Peach Twist", "price": 40 },
