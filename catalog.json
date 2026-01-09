@@ -7,7 +7,7 @@
       "brands": {
         "elfliq": {
           "title": "🧪 ELFLIQ 5%",
-          "photo": "photos/liquids/elfliq.jpg",
+            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/elfliq.1.jpg",
           "price_range": "19 EUR",
           "items": [
             { "name": "🍎 Apple Peach", "price": 19 },
