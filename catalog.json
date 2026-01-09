@@ -23,7 +23,6 @@
             { "name": "🍉 Watermelon Cherry", "price": 19 }
           ]
         },
-
         "chaser": {
           "title": "⚡ CHASER LUX",
           "photo": "photos/liquids/chaser.jpg",
@@ -50,7 +49,6 @@
             }
           ]
         },
-
         "hqd": {
           "title": "💨 HQD Salt 5%",
           "photo": "photos/liquids/hqd.jpg",
@@ -61,7 +59,6 @@
             { "name": "🫐 Blueberry Lemonade", "price": 17 }
           ]
         },
-
         "nasty": {
           "title": "🔥 NASTY 50mg",
           "photo": "photos/liquids/nasty.jpg",
@@ -102,27 +99,49 @@
     "disposables": {
       "title": "🔥 Одноразки",
       "photo": "photos/disposables.jpg",
-      "items": [
-        { "name": "Vozol Gear 10K", "price": 20 },
-        { "name": "Vozol Star 12K", "price": 25 },
-        { "name": "Vozol Vista 20K", "price": 35 },
-        { "name": "Vozol 40K", "price": 47 },
-
-        { "name": "Elf Bar 20K", "price": 36 },
-        { "name": "Elf Bar 23K", "price": 43 },
-        { "name": "Elf Bar Planet 25K", "price": 45 },
-
-        { "name": "Elf Bar TRIO 40K – 🍏 Sour Apple Ice", "price": 40 },
-        { "name": "Elf Bar TRIO 40K – 🍑 Peach Twist", "price": 40 },
-        { "name": "Elf Bar TRIO 40K – 🍎 Pomegranate Blast", "price": 40 },
-        { "name": "Elf Bar TRIO 40K – ❄️ Cool Menthol", "price": 40 },
-        { "name": "Elf Bar TRIO 40K – 🍍 Pineapple Lime", "price": 40 },
-        { "name": "Elf Bar TRIO 40K – 🍇 La Grape", "price": 40 },
-
-        { "name": "HQD 12K", "price": 25 },
-        { "name": "WAKA 10K (7–9%)", "price": 38 },
-        { "name": "WAKA 25K (7–9%)", "price": 48 }
-      ]
+      "brands": {
+        "vozol": {
+          "title": "VOZOL",
+          "items": [
+            { "name": "Vozol Gear 10K", "price": 20 },
+            { "name": "Vozol Star 12K", "price": 25 },
+            { "name": "Vozol Vista 20K", "price": 35 },
+            { "name": "Vozol 40K", "price": 47 }
+          ]
+        },
+        "elfbar": {
+          "title": "ELF BAR",
+          "items": [
+            { "name": "Elf Bar 20K", "price": 36 },
+            { "name": "Elf Bar 23K", "price": 43 },
+            { "name": "Elf Bar Planet 25K", "price": 45 }
+          ]
+        },
+        "elfbar_trio": {
+          "title": "ELF BAR TRIO",
+          "items": [
+            { "name": "🍏 Sour Apple Ice", "price": 40 },
+            { "name": "🍑 Peach Twist", "price": 40 },
+            { "name": "🍎 Pomegranate Blast", "price": 40 },
+            { "name": "❄️ Cool Menthol", "price": 40 },
+            { "name": "🍍 Pineapple Lime", "price": 40 },
+            { "name": "🍇 La Grape", "price": 40 }
+          ]
+        },
+        "hqd": {
+          "title": "HQD",
+          "items": [
+            { "name": "HQD 12K", "price": 25 }
+          ]
+        },
+        "waka": {
+          "title": "WAKA",
+          "items": [
+            { "name": "WAKA 10K (7–9%)", "price": 38 },
+            { "name": "WAKA 25K (7–9%)", "price": 48 }
+          ]
+        }
+      }
     }
   }
 }
