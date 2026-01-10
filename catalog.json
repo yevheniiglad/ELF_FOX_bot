@@ -80,23 +80,23 @@
           "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros4_mini.jpg"
         },
         { "name": "Vaporesso XROS 4 Nano",
-          "price": 45
+          "price": 45,
          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros4_nano.jpg"
         },
         { "name": "Vaporesso XROS 5 Mini",
-          "price": 38 
+          "price": 38,
          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/XROS_5.jpg"
         },
         { "name": "Vaporesso XROS 5",
-          "price": 48
+          "price": 48,
          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_Mini.jpg"
         },
         { "name": "Vaporesso XROS Pro",
-          "price": 50 
+          "price": 50,
          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_pro1.jpg"
         },
         { "name": "Vaporesso XROS Pro 2",
-          "price": 52
+          "price": 52,
          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_pro2.jpg"
         }
       ]
@@ -129,7 +129,7 @@
               "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Star.jpg"
             },
             { "name": "Vozol Vista 20K",
-              "price": 35
+              "price": 35,
             "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Vista.jpg"
             },
             { "name": "Vozol 40K", "price": 47 }
