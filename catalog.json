@@ -149,11 +149,11 @@
           "items": [
             { "name": "Elf Bar 20K",
               "price": 36,
-            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar20.jpg"
+            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_20.jpg"
             },
             { "name": "Elf Bar 23K",
               "price": 43,
-            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar23k.jpg"
+            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_23k.jpg"
             },
             { "name": "Elf Bar Planet 25K", 
               "price": 45,
