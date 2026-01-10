@@ -75,6 +75,7 @@ NO_ITEM_PHOTO_CATS = {"pods", "liquids"}
 # Анти-даблклік: якщо користувач часто тисне — щоб не було гонок
 USER_LOCKS: Dict[int, asyncio.Lock] = {}
 
+
 def get_user_lock(user_id: int) -> asyncio.Lock:
     lock = USER_LOCKS.get(user_id)
     if lock is None:
@@ -100,6 +101,7 @@ CURRENCY = CATALOG.get("currency", "EUR")
 STOCK_CACHE: Dict[str, Dict[str, Any]] = {}
 STOCK_DIRTY = False
 
+
 def load_stock_cache() -> None:
     global STOCK_CACHE
     if not STOCK_PATH.exists():
@@ -112,6 +114,7 @@ def load_stock_cache() -> None:
     except Exception:
         STOCK_CACHE = {}
 
+
 def save_stock_cache() -> None:
     global STOCK_DIRTY
     if not STOCK_DIRTY:
@@ -122,29 +125,26 @@ def save_stock_cache() -> None:
     except Exception as e:
         logging.exception("Failed to save stock.json: %s", e)
 
+
 def stock_get(key: str) -> Dict[str, Any]:
     return STOCK_CACHE.get(key, {"in_stock": True, "eta": None})
+
 
 def stock_set(key: str, in_stock: bool, eta: Optional[str] = None) -> None:
     global STOCK_DIRTY
     STOCK_CACHE[key] = {"in_stock": in_stock, "eta": eta}
     STOCK_DIRTY = True
 
+
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
+
 
 def item_key(*parts: str) -> str:
     return ":".join(parts)
 
 
 def resolve_item_by_key(key: str) -> Tuple[str, Optional[float]]:
-    """
-    Повертає (title, price) або (key, None) якщо не знайшли.
-    Формати ключів:
-      - cat:<cat_key>:<idx>
-      - brand:<cat_key>:<brand_key>:<idx>
-      - nic:<cat_key>:<brand_key>:<block_idx>:<flavor_idx>
-    """
     try:
         parts = key.split(":")
         t = parts[0]
@@ -176,8 +176,10 @@ def resolve_item_by_key(key: str) -> Tuple[str, Optional[float]]:
 def get_cart(context: ContextTypes.DEFAULT_TYPE) -> List[Dict[str, Any]]:
     return context.user_data.setdefault("cart", [])
 
+
 def cart_total(cart: List[Dict[str, Any]]) -> float:
     return round(sum(float(item["price"]) for item in cart), 2)
+
 
 def get_username(user) -> str:
     return f"@{user.username}" if user.username else f"id:{user.id}"
@@ -186,6 +188,7 @@ def get_username(user) -> str:
 # ================== PHOTO SENDER ==================
 def resolve_local_photo_path(path: str) -> str:
     return str((BASE_DIR / path).resolve())
+
 
 async def safe_send_photo(
     message_or_chat,
@@ -199,7 +202,7 @@ async def safe_send_photo(
     try:
         p = path.strip()
 
-        # URL / file_id
+        # URL
         if p.startswith("http://") or p.startswith("https://"):
             if hasattr(message_or_chat, "reply_photo"):
                 await message_or_chat.reply_photo(photo=p, caption=caption, reply_markup=reply_markup)
@@ -232,11 +235,6 @@ def kb_main() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🛒 Кошик", callback_data="cart")],
     ])
 
-def kb_back_to_catalog() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅ Назад", callback_data="catalog")],
-        [InlineKeyboardButton("⬅ На головну", callback_data="start")],
-    ])
 
 def kb_after_add() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
@@ -245,11 +243,27 @@ def kb_after_add() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("⬅ На головну", callback_data="start")],
     ])
 
+
 def fmt_price(p: Any) -> str:
     try:
         return f"{float(p):g} {CURRENCY}"
     except Exception:
         return f"{p} {CURRENCY}"
+
+
+# ================== SMART EDIT / REPLY ==================
+async def smart_edit_or_reply(q, text: str, reply_markup: Optional[InlineKeyboardMarkup] = None):
+    """
+    Гарантовано показує меню незалежно від того, під яким повідомленням натиснули кнопку:
+    - якщо це текстове повідомлення -> edit_message_text
+    - якщо це фото/інші типи -> reply_text (бо edit_message_text не можна)
+    """
+    try:
+        # Працює для звичайних текстових повідомлень
+        await q.edit_message_text(text, reply_markup=reply_markup)
+    except Exception:
+        # Якщо натиснули кнопку на фото-повідомленні або ін. — відправляємо новим повідомленням
+        await q.message.reply_text(text, reply_markup=reply_markup)
 
 
 # ================== START & CITY ==================
@@ -265,6 +279,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
+        # якщо викликали з callback
         await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
@@ -275,7 +290,7 @@ async def city_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     if city == "OTHER":
         context.user_data["awaiting_city"] = True
-        await q.edit_message_text("✍️ Напишіть, будь ласка, назву вашого міста:")
+        await smart_edit_or_reply(q, "✍️ Напишіть, будь ласка, назву вашого міста:")
     else:
         context.user_data["city"] = city
         await show_main_menu(q, context)
@@ -355,7 +370,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_main_menu(update_or_query, context: Optional[ContextTypes.DEFAULT_TYPE] = None):
     text = "Вітаю 👋\nОберіть дію:"
     if hasattr(update_or_query, "edit_message_text"):
-        await update_or_query.edit_message_text(text, reply_markup=kb_main())
+        await smart_edit_or_reply(update_or_query, text, reply_markup=kb_main())
     elif hasattr(update_or_query, "message"):
         await update_or_query.message.reply_text(text, reply_markup=kb_main())
 
@@ -374,9 +389,9 @@ async def catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     for cat_key, cat_data in CATALOG["categories"].items():
         keyboard.append([InlineKeyboardButton(cat_data["title"], callback_data=f"category:{cat_key}")])
-
     keyboard.append([InlineKeyboardButton("⬅ На головну", callback_data="start")])
-    await q.edit_message_text("🛍 Каталог\nОберіть категорію:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    await smart_edit_or_reply(q, "🛍 Каталог\nОберіть категорію:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -386,10 +401,10 @@ async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cat_key = q.data.split(":", 1)[1]
     cat = CATALOG["categories"].get(cat_key)
     if not cat:
-        await q.edit_message_text("❌ Вибрана категорія не знайдена.")
+        await smart_edit_or_reply(q, "❌ Вибрана категорія не знайдена.")
         return
 
-    # 1) Фото категорії (як і хотів — ОДНЕ)
+    # 1) Фото категорії (ОДНЕ)
     await safe_send_photo(q.message, cat.get("photo"), caption=cat.get("title"))
 
     # 2) Меню категорії
@@ -423,12 +438,12 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _, cat_key, brand_key = q.data.split(":", 2)
     cat = CATALOG["categories"].get(cat_key)
     if not cat or "brands" not in cat:
-        await q.edit_message_text("❌ Бренд не знайдено.")
+        await smart_edit_or_reply(q, "❌ Бренд не знайдено.")
         return
 
     brand = cat["brands"].get(brand_key)
     if not brand:
-        await q.edit_message_text("❌ Бренд не знайдено.")
+        await smart_edit_or_reply(q, "❌ Бренд не знайдено.")
         return
 
     caption = brand.get("title", "")
@@ -436,7 +451,6 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if pr:
         caption = f"{caption}\n💶 {pr}"
 
-    # Фото бренду (як було)
     await safe_send_photo(q.message, brand.get("photo"), caption=caption)
 
     items = brand.get("items", [])
@@ -444,14 +458,10 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if items:
         first = items[0]
-
-        # nicotine blocks
         if isinstance(first, dict) and "nicotine" in first and "items" in first:
             for idx, block in enumerate(items):
                 label = f"{block.get('nicotine')} — {fmt_price(block.get('price'))}"
                 keyboard.append([InlineKeyboardButton(label, callback_data=f"nic:{cat_key}:{brand_key}:{idx}")])
-
-        # normal dict items
         elif isinstance(first, dict) and "name" in first:
             for idx, it in enumerate(items):
                 key = item_key("brand", cat_key, brand_key, str(idx))
@@ -465,11 +475,8 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     eta_txt = f" (з {eta})" if eta else ""
                     label = f"{it['name']} — {fmt_price(it['price'])} ❌{eta_txt}"
                     cb = f"reserve:{key}"
-
                 keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
-
         else:
-            # plain list of strings
             for idx, name in enumerate(items):
                 keyboard.append([InlineKeyboardButton(str(name), callback_data=f"addb:{cat_key}:{brand_key}:{idx}")])
 
@@ -521,7 +528,9 @@ async def reserve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["reserve_key"] = key
     eta_text = f"Очікується з: {eta}" if eta else "Очікується (дату уточнюйте)"
 
-    await q.edit_message_text(
+    # Це текстове повідомлення — edit ок
+    await smart_edit_or_reply(
+        q,
         f"📌 Бронювання\n\n"
         f"🧾 {title}\n"
         f"💶 {price_txt}\n"
@@ -530,14 +539,8 @@ async def reserve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================== ADD TO CART (with per-category photo rule) ==================
-async def send_item_confirmation(
-    q,
-    item_name: str,
-    price: float,
-    photo: Optional[str],
-    force_no_photo: bool,
-):
+# ================== ADD TO CART ==================
+async def send_item_confirmation(q, item_name: str, price: float, photo: Optional[str], force_no_photo: bool):
     text = (
         "✅ Додано в кошик\n\n"
         f"🧾 {item_name}\n"
@@ -555,14 +558,12 @@ async def send_item_confirmation(
 
 async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    # Відповідаємо МАКСИМАЛЬНО швидко, щоб не було "зависання кнопки"
     await q.answer()
 
     user_id = q.from_user.id
     lock = get_user_lock(user_id)
 
     if lock.locked():
-        # швидкий фідбек, якщо користувач спамить кліками
         await q.answer("⏳ Зачекайте…", show_alert=False)
 
     async with lock:
@@ -601,7 +602,7 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 flavor = block["items"][int(flavor_idx)]
                 price = block["price"]
                 item_name = f"{brand.get('title','')} {block.get('nicotine')} — {flavor}".strip()
-                photo = brand.get("photo")  # буде ігноруватись для liquids через правило
+                photo = brand.get("photo")
                 cart.append({"name": item_name, "price": price})
 
             else:
@@ -614,13 +615,7 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
 
         force_no_photo = (selected_cat_key in NO_ITEM_PHOTO_CATS)
-        await send_item_confirmation(
-            q,
-            item_name=item_name,
-            price=float(price),
-            photo=photo,
-            force_no_photo=force_no_photo
-        )
+        await send_item_confirmation(q, item_name=item_name, price=float(price), photo=photo, force_no_photo=force_no_photo)
 
 
 # ================== CART ==================
@@ -630,7 +625,8 @@ async def cart_view_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cart = get_cart(context)
     if not cart:
-        await q.edit_message_text(
+        await smart_edit_or_reply(
+            q,
             "🛒 Кошик порожній.\n\nНатисніть «Каталог», щоб додати товари.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
@@ -650,7 +646,7 @@ async def cart_view_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⬅ На головну", callback_data="start")],
     ])
 
-    await q.edit_message_text(text, reply_markup=kb)
+    await smart_edit_or_reply(q, text, reply_markup=kb)
 
 
 async def remove_one_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -659,17 +655,12 @@ async def remove_one_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     cart = get_cart(context)
     if not cart:
-        await q.edit_message_text("🛒 Кошик порожній.", reply_markup=kb_main())
+        await smart_edit_or_reply(q, "🛒 Кошик порожній.", reply_markup=kb_main())
         return
 
-    removed = cart.pop()  # прибираємо останній
+    removed = cart.pop()
     await q.message.reply_text(f"➖ Прибрано: {removed['name']}")
-
-    # Показуємо оновлений кошик
-    # (перекидаємо на cart_view логіку)
-    class DummyUpdate:
-        callback_query = q
-    await cart_view_handler(DummyUpdate(), context)
+    await cart_view_handler(update, context)
 
 
 # ================== CHECKOUT ==================
@@ -680,7 +671,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = q.from_user
     cart = get_cart(context)
     if not cart:
-        await q.edit_message_text("🛒 Кошик порожній.", reply_markup=kb_main())
+        await smart_edit_or_reply(q, "🛒 Кошик порожній.", reply_markup=kb_main())
         return
 
     city = context.user_data.get("city", "Невідомо")
@@ -697,14 +688,12 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🕒 {timestamp}"
     )
 
-    # 1) Адмінам
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.send_message(chat_id=admin_id, text=order_text)
         except Exception as e:
             logging.exception("Failed to send order to admin %s: %s", admin_id, e)
 
-    # 2) Курʼєру
     courier_chat_id = get_courier_chat_id(city)
     if courier_chat_id:
         try:
@@ -715,7 +704,8 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     courier = get_courier_for_city(city)
     context.user_data.pop("cart", None)
 
-    await q.edit_message_text(
+    await smart_edit_or_reply(
+        q,
         "✅ Дякуємо за замовлення!\n\n"
         "Курʼєр звʼяжеться з вами:\n"
         f"{courier}",
@@ -726,7 +716,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================== ADMIN ==================
+# ================== ADMIN (без змін по логіці, але теж smart_edit_or_reply корисно) ==================
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -748,7 +738,7 @@ async def admin_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cat_key = q.data.split(":", 1)[1]
     cat = CATALOG["categories"].get(cat_key)
     if not cat:
-        await q.edit_message_text("Категорія не знайдена.")
+        await smart_edit_or_reply(q, "Категорія не знайдена.")
         return
 
     if "brands" in cat:
@@ -756,7 +746,7 @@ async def admin_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for brand_key, brand in cat["brands"].items():
             kb.append([InlineKeyboardButton(brand.get("title", brand_key), callback_data=f"admin_brand:{cat_key}:{brand_key}")])
         kb.append([InlineKeyboardButton("⬅ Назад", callback_data="admin_back")])
-        await q.edit_message_text("Оберіть бренд:", reply_markup=InlineKeyboardMarkup(kb))
+        await smart_edit_or_reply(q, "Оберіть бренд:", reply_markup=InlineKeyboardMarkup(kb))
         return
 
     kb = []
@@ -771,7 +761,7 @@ async def admin_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb.append([InlineKeyboardButton(f"{mark} {it['name']}", callback_data=f"admin_toggle:{key}")])
 
     kb.append([InlineKeyboardButton("⬅ Назад", callback_data="admin_back")])
-    await q.edit_message_text("Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
+    await smart_edit_or_reply(q, "Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def admin_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -784,12 +774,12 @@ async def admin_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _, cat_key, brand_key = q.data.split(":", 2)
     brand = CATALOG["categories"][cat_key]["brands"].get(brand_key)
     if not brand:
-        await q.edit_message_text("Бренд не знайдено.")
+        await smart_edit_or_reply(q, "Бренд не знайдено.")
         return
 
     items = brand.get("items", [])
     if not items:
-        await q.edit_message_text("Немає позицій у бренді.")
+        await smart_edit_or_reply(q, "Немає позицій у бренді.")
         return
 
     first = items[0]
@@ -801,7 +791,7 @@ async def admin_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 callback_data=f"admin_block:{cat_key}:{brand_key}:{bidx}"
             )])
         kb.append([InlineKeyboardButton("⬅ Назад", callback_data=f"admin_cat:{cat_key}")])
-        await q.edit_message_text("Оберіть блок:", reply_markup=InlineKeyboardMarkup(kb))
+        await smart_edit_or_reply(q, "Оберіть блок:", reply_markup=InlineKeyboardMarkup(kb))
         return
 
     kb = []
@@ -819,7 +809,7 @@ async def admin_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb.append([InlineKeyboardButton(f"{mark} {it['name']}", callback_data=f"admin_toggle:{key}")])
 
     kb.append([InlineKeyboardButton("⬅ Назад", callback_data=f"admin_cat:{cat_key}")])
-    await q.edit_message_text("Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
+    await smart_edit_or_reply(q, "Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def admin_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -845,7 +835,7 @@ async def admin_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb.append([InlineKeyboardButton(f"{mark} {flavor}", callback_data=f"admin_toggle:{key}")])
 
     kb.append([InlineKeyboardButton("⬅ Назад", callback_data=f"admin_brand:{cat_key}:{brand_key}")])
-    await q.edit_message_text("Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
+    await smart_edit_or_reply(q, "Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def admin_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -862,7 +852,8 @@ async def admin_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["awaiting_eta_key"] = key
         title, price = resolve_item_by_key(key)
         extra = f" — {fmt_price(price)}" if price is not None else ""
-        await q.edit_message_text(
+        await smart_edit_or_reply(
+            q,
             f"❌ Ставимо 'нема в наявності'\n"
             f"Товар: {title}{extra}\n\n"
             "Вкажи дату надходження у форматі YYYY-MM-DD (наприклад 2026-01-20):"
@@ -870,10 +861,9 @@ async def admin_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         stock_set(key, in_stock=True, eta=None)
         save_stock_cache()
-
         title, price = resolve_item_by_key(key)
         extra = f" — {fmt_price(price)}" if price is not None else ""
-        await q.edit_message_text(f"✅ Тепер 'в наявності'\nТовар: {title}{extra}")
+        await smart_edit_or_reply(q, f"✅ Тепер 'в наявності'\nТовар: {title}{extra}")
 
 
 async def admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -887,7 +877,7 @@ async def admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for cat_key, cat in CATALOG["categories"].items():
         keyboard.append([InlineKeyboardButton(f"⚙️ {cat.get('title', cat_key)}", callback_data=f"admin_cat:{cat_key}")])
 
-    await q.edit_message_text("🛠 Адмін-панель (наявність):", reply_markup=InlineKeyboardMarkup(keyboard))
+    await smart_edit_or_reply(q, "🛠 Адмін-панель (наявність):", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 # ================== ERROR HANDLER ==================
