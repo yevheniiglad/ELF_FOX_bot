@@ -135,7 +135,7 @@
             {
               "name": "Vozol Vista 20K",
               "price": 35,
-              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Vista.jpg"
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/vozol_vista_20k.jpg"
             },
             {
               "name": "Vozol 40K",
@@ -147,9 +147,18 @@
         "elfbar": {
           "title": "ELF BAR",
           "items": [
-            { "name": "Elf Bar 20K", "price": 36 },
-            { "name": "Elf Bar 23K", "price": 43 },
-            { "name": "Elf Bar Planet 25K", "price": 45 }
+            { "name": "Elf Bar 20K",
+              "price": 36,
+            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar20.jpg"
+            },
+            { "name": "Elf Bar 23K",
+              "price": 43,
+            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar23k.jpg"
+            },
+            { "name": "Elf Bar Planet 25K", 
+              "price": 45,
+            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Planet 25k.jpg"
+            }
           ]
         },
         "elfbar_trio": {
@@ -166,13 +175,22 @@
         },
         "hqd": {
           "title": "HQD",
-          "items": [{ "name": "HQD 12K", "price": 25 }]
+          "items": [{ "name": "HQD 12K",
+          "price": 25,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/hqd_12k.jpg"
+          }]
         },
         "waka": {
           "title": "WAKA",
           "items": [
-            { "name": "WAKA 10K (7–9%)", "price": 38 },
-            { "name": "WAKA 25K (7–9%)", "price": 48 }
+            { "name": "WAKA 10K (7–9%)",
+              "price": 38,
+             "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka10k.jpg"
+            },
+            { "name": "WAKA 25K (7–9%)",
+              "price": 48,
+             "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/WAKA_25k.jpg"
+            }
           ]
         }
       }
