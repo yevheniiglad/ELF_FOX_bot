@@ -71,7 +71,7 @@
         }
       }
     },
-    "devices": {
+   "devices": {
       "title": "🔌 Девайси",
       "items": [
         {
@@ -79,25 +79,30 @@
           "price": 36,
           "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros4_mini.jpg"
         },
-        { "name": "Vaporesso XROS 4 Nano",
+        {
+          "name": "Vaporesso XROS 4 Nano",
           "price": 45,
-         "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros4_nano.jpg"
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros4_nano.jpg"
         },
-        { "name": "Vaporesso XROS 5 Mini",
+        {
+          "name": "Vaporesso XROS 5 Mini",
           "price": 38,
-         "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/XROS_5.jpg"
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/XROS_5.jpg"
         },
-        { "name": "Vaporesso XROS 5",
+        {
+          "name": "Vaporesso XROS 5",
           "price": 48,
-         "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_Mini.jpg"
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_Mini.jpg"
         },
-        { "name": "Vaporesso XROS Pro",
+        {
+          "name": "Vaporesso XROS Pro",
           "price": 50,
-         "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_pro1.jpg"
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_pro1.jpg"
         },
-        { "name": "Vaporesso XROS Pro 2",
+        {
+          "name": "Vaporesso XROS Pro 2",
           "price": 52,
-         "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_pro2.jpg"
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_pro2.jpg"
         }
       ]
     },
@@ -108,12 +113,12 @@
         { "name": "Картридж 0.4Ω", "price": 8 },
         { "name": "Картридж 0.6Ω", "price": 8 },
         { "name": "Картридж 0.8Ω", "price": 8 },
-        { "name": "Картридж 1.0Ω", "price": 8 },
+        { "name": "Картридж 1.0Ω", "price": 8 }
       ]
     },
     "disposables": {
       "title": "🔥 Одноразки",
-      "photo": "photos/disposables.jpg",
+      "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Star.jpg",
       "brands": {
         "vozol": {
           "title": "VOZOL",
@@ -128,11 +133,16 @@
               "price": 25,
               "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Star.jpg"
             },
-            { "name": "Vozol Vista 20K",
+            {
+              "name": "Vozol Vista 20K",
               "price": 35,
-            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Vista.jpg"
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Vista.jpg"
             },
-            { "name": "Vozol 40K", "price": 47 }
+            {
+              "name": "Vozol 40K",
+              "price": 47,
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Vista.jpg"
+            }
           ]
         },
         "elfbar": {
@@ -157,9 +167,7 @@
         },
         "hqd": {
           "title": "HQD",
-          "items": [
-            { "name": "HQD 12K", "price": 25 }
-          ]
+          "items": [{ "name": "HQD 12K", "price": 25 }]
         },
         "waka": {
           "title": "WAKA",
@@ -171,4 +179,3 @@
       }
     }
   }
-}
