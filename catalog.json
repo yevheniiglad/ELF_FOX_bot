@@ -107,8 +107,18 @@
       ]
     },
     "pods": {
-      "title": "🔧 Картриджі",
+      "title": "🔧 Картриджі Xros",
       "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/car.jpg",
+      "items": [
+        { "name": "Картридж 0.4Ω", "price": 8 },
+        { "name": "Картридж 0.6Ω", "price": 8 },
+        { "name": "Картридж 0.8Ω", "price": 8 },
+        { "name": "Картридж 1.0Ω", "price": 8 }
+      ]
+    },
+     "pods": {
+      "title": "🔧 Картриджі Elf Bar Pro",
+      "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/cur.jpg",
       "items": [
         { "name": "Картридж 0.4Ω", "price": 8 },
         { "name": "Картридж 0.6Ω", "price": 8 },
