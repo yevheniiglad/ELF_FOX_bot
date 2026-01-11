@@ -111,8 +111,12 @@
         }
       ]
     },
-    "pods": {
-      "title": "🔧 Картриджі Xros",
+    "cartridges": {
+  "title": "🔧 Картриджі",
+  "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/car.jpg",
+  "brands": {
+    "xros": {
+      "title": "Vaporesso XROS",
       "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/car.jpg",
       "items": [
         { "name": "Картридж 0.4Ω", "price": 8 },
@@ -121,8 +125,8 @@
         { "name": "Картридж 1.0Ω", "price": 8 }
       ]
     },
-     "pods": {
-      "title": "🔧 Картриджі Elf Bar Pro",
+    "elfbar_pro": {
+      "title": "Elf Bar Pro",
       "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/cur.jpg",
       "items": [
         { "name": "Картридж 0.4Ω", "price": 8 },
@@ -130,7 +134,10 @@
         { "name": "Картридж 0.8Ω", "price": 8 },
         { "name": "Картридж 1.0Ω", "price": 8 }
       ]
-    },
+    }
+  }
+}
+
     "disposables": {
       "title": "🔥 Одноразки",
       "brands": {
