@@ -4,7 +4,7 @@ import logging
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Union
 
 from telegram import (
     Update,
@@ -144,7 +144,25 @@ def item_key(*parts: str) -> str:
     return ":".join(parts)
 
 
+def _extract_flavor_name(fl: Any) -> str:
+    """Підтримка смаків як рядків або як dict {name: ...}."""
+    if isinstance(fl, str):
+        return fl
+    if isinstance(fl, dict):
+        return str(fl.get("name") or fl.get("title") or fl)
+    return str(fl)
+
+
 def resolve_item_by_key(key: str) -> Tuple[str, Optional[float]]:
+    """
+    Повертає (title, price) або (key, None) якщо не знайшли.
+
+    Формати ключів:
+      - cat:<cat_key>:<idx>
+      - brand:<cat_key>:<brand_key>:<idx>
+      - nic:<cat_key>:<brand_key>:<block_idx>:<flavor_idx>
+      - flv:<cat_key>:<brand_key>:<parent_idx>:<flavor_idx>    <-- NEW (смаки як підменю)
+    """
     try:
         parts = key.split(":")
         t = parts[0]
@@ -166,6 +184,19 @@ def resolve_item_by_key(key: str) -> Tuple[str, Optional[float]]:
             flavor = block["items"][int(flavor_idx)]
             title = f"{brand.get('title','')} {block.get('nicotine')} — {flavor}"
             return title.strip(), block.get("price")
+
+        # ===== NEW: flavors submenu =====
+        if t == "flv":
+            _, cat_key, brand_key, parent_idx, flavor_idx = parts
+            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+            parent = brand["items"][int(parent_idx)]
+            flavors = parent.get("items", [])
+            fl = flavors[int(flavor_idx)]
+            fl_name = _extract_flavor_name(fl)
+            base_name = parent.get("name", brand.get("title", ""))
+            title = f"{base_name} — {fl_name}"
+            return title.strip(), parent.get("price")
+
     except Exception:
         pass
 
@@ -259,10 +290,8 @@ async def smart_edit_or_reply(q, text: str, reply_markup: Optional[InlineKeyboar
     - якщо це фото/інші типи -> reply_text (бо edit_message_text не можна)
     """
     try:
-        # Працює для звичайних текстових повідомлень
         await q.edit_message_text(text, reply_markup=reply_markup)
     except Exception:
-        # Якщо натиснули кнопку на фото-повідомленні або ін. — відправляємо новим повідомленням
         await q.message.reply_text(text, reply_markup=reply_markup)
 
 
@@ -279,7 +308,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        # якщо викликали з callback
         await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
@@ -458,31 +486,96 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if items:
         first = items[0]
+
+        # nicotine blocks
         if isinstance(first, dict) and "nicotine" in first and "items" in first:
             for idx, block in enumerate(items):
                 label = f"{block.get('nicotine')} — {fmt_price(block.get('price'))}"
                 keyboard.append([InlineKeyboardButton(label, callback_data=f"nic:{cat_key}:{brand_key}:{idx}")])
+
+        # normal dict items (name/price)
         elif isinstance(first, dict) and "name" in first:
             for idx, it in enumerate(items):
-                key = item_key("brand", cat_key, brand_key, str(idx))
-                st = stock_get(key)
+                # ===== NEW: якщо у товару є "items" і це список смаків -> відкриваємо меню смаків
+                has_flavors = isinstance(it, dict) and isinstance(it.get("items"), list) and len(it.get("items")) > 0
 
-                if st.get("in_stock", True):
-                    label = f"{it['name']} — {fmt_price(it['price'])} ✅"
-                    cb = f"addb:{cat_key}:{brand_key}:{idx}"
-                else:
+                key_parent = item_key("brand", cat_key, brand_key, str(idx))
+                st = stock_get(key_parent)
+
+                if not st.get("in_stock", True):
                     eta = st.get("eta")
                     eta_txt = f" (з {eta})" if eta else ""
                     label = f"{it['name']} — {fmt_price(it['price'])} ❌{eta_txt}"
-                    cb = f"reserve:{key}"
-                keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+                    cb = f"reserve:{key_parent}"
+                    keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+                    continue
+
+                if has_flavors:
+                    # не додаємо в кошик одразу — відкриваємо смаки
+                    label = f"{it['name']} — {fmt_price(it['price'])} ✅"
+                    cb = f"flavors:{cat_key}:{brand_key}:{idx}"
+                    keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+                else:
+                    label = f"{it['name']} — {fmt_price(it['price'])} ✅"
+                    cb = f"addb:{cat_key}:{brand_key}:{idx}"
+                    keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+
         else:
+            # plain list of strings
             for idx, name in enumerate(items):
                 keyboard.append([InlineKeyboardButton(str(name), callback_data=f"addb:{cat_key}:{brand_key}:{idx}")])
 
     keyboard.append([InlineKeyboardButton("🛒 Кошик", callback_data="cart")])
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"category:{cat_key}")])
     await q.message.reply_text("Оберіть:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ================== NEW: FLAVORS MENU ==================
+async def flavors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Відкриває список смаків для конкретного товару бренду:
+    callback: flavors:<cat_key>:<brand_key>:<parent_idx>
+    """
+    q = update.callback_query
+    await q.answer()
+
+    _, cat_key, brand_key, parent_idx = q.data.split(":", 3)
+    parent_idx_i = int(parent_idx)
+
+    try:
+        brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+        parent = brand["items"][parent_idx_i]
+
+        flavors = parent.get("items", [])
+        if not isinstance(flavors, list) or not flavors:
+            await q.message.reply_text("❌ Для цього товару немає смаків.")
+            return
+
+        keyboard = []
+        for fidx, fl in enumerate(flavors):
+            fl_name = _extract_flavor_name(fl)
+
+            # stock по конкретному смаку (щоб було як nicotine)
+            key = item_key("flv", cat_key, brand_key, str(parent_idx_i), str(fidx))
+            st = stock_get(key)
+
+            if st.get("in_stock", True):
+                label = f"{fl_name} ✅"
+                cb = f"addf:{cat_key}:{brand_key}:{parent_idx_i}:{fidx}"
+            else:
+                eta = st.get("eta")
+                eta_txt = f" (з {eta})" if eta else ""
+                label = f"{fl_name} ❌{eta_txt}"
+                cb = f"reserve:{key}"
+
+            keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+
+        keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"brand:{cat_key}:{brand_key}")])
+        await q.message.reply_text("Оберіть смак:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    except Exception as e:
+        logging.exception("flavors_handler error: %s", e)
+        await q.message.reply_text("❌ Сталась помилка при відкритті смаків.")
 
 
 async def nicotine_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -528,7 +621,6 @@ async def reserve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["reserve_key"] = key
     eta_text = f"Очікується з: {eta}" if eta else "Очікується (дату уточнюйте)"
 
-    # Це текстове повідомлення — edit ок
     await smart_edit_or_reply(
         q,
         f"📌 Бронювання\n\n"
@@ -571,9 +663,9 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         cart = get_cart(context)
 
         item_name = ""
-        price = None
-        photo = None
-        selected_cat_key = None
+        price: Optional[float] = None
+        photo: Optional[str] = None
+        selected_cat_key: Optional[str] = None
 
         try:
             if parts[0] == "add":
@@ -581,7 +673,7 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 selected_cat_key = cat_key
                 item = CATALOG["categories"][cat_key]["items"][int(idx)]
                 item_name = item["name"]
-                price = item["price"]
+                price = float(item["price"])
                 photo = item.get("photo")
                 cart.append({"name": item_name, "price": price})
 
@@ -590,7 +682,7 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 selected_cat_key = cat_key
                 item = CATALOG["categories"][cat_key]["brands"][brand_key]["items"][int(idx)]
                 item_name = item["name"]
-                price = item["price"]
+                price = float(item["price"])
                 photo = item.get("photo") or CATALOG["categories"][cat_key]["brands"][brand_key].get("photo")
                 cart.append({"name": item_name, "price": price})
 
@@ -600,9 +692,27 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 brand = CATALOG["categories"][cat_key]["brands"][brand_key]
                 block = brand["items"][int(block_idx)]
                 flavor = block["items"][int(flavor_idx)]
-                price = block["price"]
+                price = float(block["price"])
                 item_name = f"{brand.get('title','')} {block.get('nicotine')} — {flavor}".strip()
                 photo = brand.get("photo")
+                cart.append({"name": item_name, "price": price})
+
+            # ===== NEW: add flavor from brand item =====
+            elif parts[0] == "addf":
+                _, cat_key, brand_key, parent_idx, flavor_idx = parts
+                selected_cat_key = cat_key
+                brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+                parent = brand["items"][int(parent_idx)]
+                flavors = parent.get("items", [])
+                fl = flavors[int(flavor_idx)]
+                fl_name = _extract_flavor_name(fl)
+
+                price = float(parent["price"])
+                base_name = parent.get("name", brand.get("title", ""))
+                item_name = f"{base_name} — {fl_name}".strip()
+
+                # фото: спочатку фото товару, потім бренду
+                photo = parent.get("photo") or brand.get("photo")
                 cart.append({"name": item_name, "price": price})
 
             else:
@@ -615,7 +725,13 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
 
         force_no_photo = (selected_cat_key in NO_ITEM_PHOTO_CATS)
-        await send_item_confirmation(q, item_name=item_name, price=float(price), photo=photo, force_no_photo=force_no_photo)
+        await send_item_confirmation(
+            q,
+            item_name=item_name,
+            price=float(price),
+            photo=photo,
+            force_no_photo=force_no_photo
+        )
 
 
 # ================== CART ==================
@@ -716,7 +832,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================== ADMIN (без змін по логіці, але теж smart_edit_or_reply корисно) ==================
+# ================== ADMIN (як було) ==================
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -901,10 +1017,11 @@ def main():
     app.add_handler(CallbackQueryHandler(catalog_menu, pattern="^catalog$"))
     app.add_handler(CallbackQueryHandler(category_handler, pattern="^category:"))
 
-    # Brands, nicotine and adding
+    # Brands, nicotine, flavors and adding
     app.add_handler(CallbackQueryHandler(brand_handler, pattern="^brand:"))
     app.add_handler(CallbackQueryHandler(nicotine_handler, pattern="^nic:"))
-    app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern="^(add:|addb:|addn:)"))
+    app.add_handler(CallbackQueryHandler(flavors_handler, pattern="^flavors:"))  # <-- NEW
+    app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern="^(add:|addb:|addn:|addf:)"))  # <-- addf
 
     # Reserve
     app.add_handler(CallbackQueryHandler(reserve_handler, pattern="^reserve:"))
