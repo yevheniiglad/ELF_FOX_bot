@@ -103,6 +103,11 @@
           "name": "Vaporesso XROS Pro 2",
           "price": 52,
           "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_pro2.jpg"
+        },
+          {
+          "name": "Elf Bar Pro 2",
+          "price": 44,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Pro.jpg"
         }
       ]
     },
