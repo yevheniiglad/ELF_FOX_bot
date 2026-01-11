@@ -189,7 +189,9 @@
             },
             { "name": "WAKA 25K (7–9%)",
               "price": 48,
-             "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/WAKA_25k.jpg"
+             "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka_25k.jpg"
+              "items": [
+            { "name": "🍇 Green Grape" },
             }
           ]
         }
