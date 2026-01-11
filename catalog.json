@@ -7,7 +7,7 @@
       "brands": {
         "elfliq": {
           "title": "🧪 ELFLIQ 5%",
-            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/elfliq.1.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/elfliq.1.jpg",
           "price_range": "19 EUR",
           "items": [
             { "name": "🍎 Apple Peach", "price": 19 },
@@ -25,7 +25,7 @@
         },
         "chaser": {
           "title": "⚡ CHASER LUX",
-           "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/chaser_lux.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/chaser_lux.jpg",
           "items": [
             {
               "nicotine": "5%",
@@ -71,7 +71,7 @@
         }
       }
     },
-   "devices": {
+    "devices": {
       "title": "🔌 Девайси",
       "items": [
         {
@@ -147,17 +147,20 @@
         "elfbar": {
           "title": "ELF BAR",
           "items": [
-            { "name": "Elf Bar 20K",
+            {
+              "name": "Elf Bar 20K",
               "price": 36,
-            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_20.jpg"
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_20.jpg"
             },
-            { "name": "Elf Bar 23K",
+            {
+              "name": "Elf Bar 23K",
               "price": 43,
-            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_23k.jpg"
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_23k.jpg"
             },
-            { "name": "Elf Bar Planet 25K", 
+            {
+              "name": "Elf Bar Planet 25K",
               "price": 45,
-            "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Planet 25k.jpg"
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Planet 25k.jpg"
             }
           ]
         },
@@ -175,23 +178,29 @@
         },
         "hqd": {
           "title": "HQD",
-          "items": [{ "name": "HQD 12K",
-          "price": 25,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/hqd_12k.jpg"
-          }]
+          "items": [
+            {
+              "name": "HQD 12K",
+              "price": 25,
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/hqd_12k.jpg"
+            }
+          ]
         },
         "waka": {
           "title": "WAKA",
           "items": [
-            { "name": "WAKA 10K (7–9%)",
+            {
+              "name": "WAKA 10K",
               "price": 38,
-             "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka10k.jpg"
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka10k.jpg"
             },
-            { "name": "WAKA 25K (7–9%)",
+            {
+              "name": "WAKA 25K",
               "price": 48,
-             "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka_25k.jpg"
+              "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka_25k.jpg",
               "items": [
-            { "name": "🍇 Green Grape" },
+                "🍇 Green Grape"
+              ]
             }
           ]
         }
