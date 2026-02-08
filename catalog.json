@@ -1,16 +1,13 @@
 {
   "currency": "EUR",
-  "assets": {
-    "base_raw_url": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/"
-  },
   "categories": {
     "liquids": {
       "title": "💧 Рідини",
-      "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Nasty.jpg",
-      "sections": {
+      "photo": "photos/liquids.jpg",
+      "brands": {
         "elfliq": {
           "title": "🧪 ELFLIQ 5%",
-          "photo": null,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/elfliq.1.jpg",
           "price_range": "19 EUR",
           "items": [
             { "name": "🍎 Apple Peach", "price": 19 },
@@ -28,8 +25,8 @@
         },
         "chaser": {
           "title": "⚡ CHASER LUX",
-          "photo": null,
-          "variants": [
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/chaser_lux.jpg",
+          "items": [
             {
               "nicotine": "5%",
               "price": 19,
@@ -52,9 +49,9 @@
             }
           ]
         },
-        "hqd_liquid": {
+        "hqd": {
           "title": "💨 HQD Salt 5%",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/hqd.png",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/hqd_liquid.jpg",
           "price_range": "17 EUR",
           "items": [
             { "name": "🍒 Cherry Ice", "price": 17 },
@@ -64,7 +61,7 @@
         },
         "nasty": {
           "title": "🔥 NASTY 50mg",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Nasty.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/nasty.jpg",
           "price_range": "17.5 EUR",
           "items": [
             { "name": "🥤 Cherry Cola", "price": 17.5 },
@@ -74,39 +71,52 @@
         }
       }
     },
-
     "devices": {
       "title": "🔌 Девайси",
-      "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Vaporesso.jpg.png",
-      "sections": {
-        "vaporesso_xros": {
-          "title": "🔌 Vaporesso XROS",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Vaporesso.jpg.png",
-          "items": [
-            { "name": "Vaporesso XROS 4 Nano", "price": 45 },
-            { "name": "Vaporesso XROS 5 Mini", "price": 38 },
-            { "name": "Vaporesso XROS 5", "price": 48 },
-            { "name": "Vaporesso XROS Pro", "price": 50 },
-            { "name": "Vaporesso XROS Pro 2", "price": 52 }
-          ]
+      "items": [
+        {
+          "name": "Vaporesso XROS 4 Mini",
+          "price": 36,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros4_mini.jpg"
         },
-        "elf_bar_pro_2": {
-          "title": "🔌 Elf Bar Pro 2",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Elf_Bar1.png",
-          "items": [
-            { "name": "Elf Bar Pro 2", "price": 44 }
-          ]
+        {
+          "name": "Vaporesso XROS 4 Nano",
+          "price": 45,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros4_nano.jpg"
+        },
+        {
+          "name": "Vaporesso XROS 5 Mini",
+          "price": 38,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/XROS_5.jpg"
+        },
+        {
+          "name": "Vaporesso XROS 5",
+          "price": 48,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_5.jpg"
+        },
+        {
+          "name": "Vaporesso XROS Pro",
+          "price": 50,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_pro1.jpg"
+        },
+        {
+          "name": "Vaporesso XROS Pro 2",
+          "price": 52,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_pro2.jpg"
+        },
+        {
+          "name": "Elf Bar Pro 2",
+          "price": 44,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Pro.jpg"
         }
-      }
+      ]
     },
-
     "cartridges": {
       "title": "🔧 Картриджі",
-      "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/car1.png.jpg",
-      "sections": {
-        "cartridges_xros": {
-          "title": "🔧 Vaporesso XROS — картриджі",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/car1.png.jpg",
+      "brands": {
+        "xros": {
+          "title": "Vaporesso XROS",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/car.jpg",
           "items": [
             { "name": "Картридж 0.4Ω", "price": 8 },
             { "name": "Картридж 0.6Ω", "price": 8 },
@@ -114,9 +124,9 @@
             { "name": "Картридж 1.0Ω", "price": 8 }
           ]
         },
-        "cartridges_elfbar_pro": {
-          "title": "🔧 Elf Bar Pro — картриджі",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/car2.png.jpg",
+        "elfbar_pro": {
+          "title": "Elf Bar Pro",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/cur.jpg",
           "items": [
             { "name": "Картридж 0.4Ω", "price": 8 },
             { "name": "Картридж 0.6Ω", "price": 8 },
@@ -126,24 +136,26 @@
         }
       }
     },
-
     "disposables": {
       "title": "🔥 Одноразки",
-      "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/elf_bar.png",
-      "sections": {
+      "brands": {
         "vozol": {
           "title": "VOZOL",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/vozol.jpg.png",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Gear.jpg",
           "items": [
             { "name": "Vozol Gear 10K", "price": 20 },
-            { "name": "Vozol Star 12K", "price": 25 },
+            {
+              "name": "Vozol Star 12K",
+              "price": 25,
+              "photo_note_removed": true
+            },
             { "name": "Vozol Vista 20K", "price": 35 },
             { "name": "Vozol 40K", "price": 47 }
           ]
         },
         "elfbar": {
           "title": "ELF BAR",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/elf_bar.png",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_20.jpg",
           "items": [
             { "name": "Elf Bar 20K", "price": 36 },
             { "name": "Elf Bar 23K", "price": 43 },
@@ -152,7 +164,7 @@
         },
         "elfbar_trio": {
           "title": "ELF BAR TRIO",
-          "photo": null,
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Trio_40K-.jpg",
           "items": [
             { "name": "🍏 Sour Apple Ice", "price": 40 },
             { "name": "🍑 Peach Twist", "price": 40 },
@@ -164,17 +176,23 @@
         },
         "hqd": {
           "title": "HQD",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/hqd.png",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/hqd_12k.jpg",
           "items": [
             { "name": "HQD 12K", "price": 25 }
           ]
         },
         "waka": {
           "title": "WAKA",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Waka.jpg.png",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka10k.jpg",
           "items": [
             { "name": "WAKA 10K", "price": 38 },
-            { "name": "WAKA 25K — Green Grape", "price": 48 }
+            {
+              "name": "WAKA 25K",
+              "price": 48,
+              "items": [
+                "🍇 Green Grape"
+              ]
+            }
           ]
         }
       }
