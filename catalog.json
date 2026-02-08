@@ -61,7 +61,7 @@
         },
         "nasty": {
           "title": "🔥 NASTY 50mg",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/nasty.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Nasty.jpg",
           "price_range": "17.5 EUR",
           "items": [
             { "name": "🥤 Cherry Cola", "price": 17.5 },
@@ -89,7 +89,7 @@
         },
         "elfbar_pro_2": {
           "title": "Elf Bar Pro 2",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Elf_Bar1.png",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/elf_pro.pngjpg",
           "items": [
             { "name": "Elf Bar Pro 2", "price": 44 }
           ]
@@ -102,7 +102,7 @@
       "brands": {
         "xros": {
           "title": "Vaporesso XROS",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/car.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/car1.jpg",
           "items": [
             { "name": "Картридж 0.4Ω", "price": 8 },
             { "name": "Картридж 0.6Ω", "price": 8 },
@@ -112,7 +112,7 @@
         },
         "elfbar_pro": {
           "title": "Elf Bar Pro",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/cur.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/car2.jpg",
           "items": [
             { "name": "Картридж 0.4Ω", "price": 8 },
             { "name": "Картридж 0.6Ω", "price": 8 },
@@ -138,7 +138,7 @@
         },
         "elfbar": {
           "title": "ELF BAR",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/elf_bar.png",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Elf_Bar1.png",
           "items": [
             { "name": "Elf Bar 20K", "price": 36 },
             { "name": "Elf Bar 23K", "price": 43 },
@@ -147,7 +147,7 @@
         },
         "elfbar_trio": {
           "title": "ELF BAR TRIO",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Trio_40K-.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/elf_bar.png",
           "items": [
             { "name": "🍏 Sour Apple Ice", "price": 40 },
             { "name": "🍑 Peach Twist", "price": 40 },
