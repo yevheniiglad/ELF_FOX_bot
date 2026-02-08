@@ -71,46 +71,32 @@
         }
       }
     },
+
     "devices": {
       "title": "🔌 Девайси",
-      "items": [
-        {
-          "name": "Vaporesso XROS 4 Mini",
-          "price": 36,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros4_mini.jpg"
+      "brands": {
+        "vaporesso_xros": {
+          "title": "Vaporesso XROS",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Vaporesso.jpg.png",
+          "items": [
+            { "name": "Vaporesso XROS 4 Mini", "price": 36 },
+            { "name": "Vaporesso XROS 4 Nano", "price": 45 },
+            { "name": "Vaporesso XROS 5 Mini", "price": 38 },
+            { "name": "Vaporesso XROS 5", "price": 48 },
+            { "name": "Vaporesso XROS Pro", "price": 50 },
+            { "name": "Vaporesso XROS Pro 2", "price": 52 }
+          ]
         },
-        {
-          "name": "Vaporesso XROS 4 Nano",
-          "price": 45,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros4_nano.jpg"
-        },
-        {
-          "name": "Vaporesso XROS 5 Mini",
-          "price": 38,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/XROS_5.jpg"
-        },
-        {
-          "name": "Vaporesso XROS 5",
-          "price": 48,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_5.jpg"
-        },
-        {
-          "name": "Vaporesso XROS Pro",
-          "price": 50,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Xros_pro1.jpg"
-        },
-        {
-          "name": "Vaporesso XROS Pro 2",
-          "price": 52,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/xros_pro2.jpg"
-        },
-        {
-          "name": "Elf Bar Pro 2",
-          "price": 44,
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_Pro.jpg"
+        "elfbar_pro_2": {
+          "title": "Elf Bar Pro 2",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Elf_Bar1.png",
+          "items": [
+            { "name": "Elf Bar Pro 2", "price": 44 }
+          ]
         }
-      ]
+      }
     },
+
     "cartridges": {
       "title": "🔧 Картриджі",
       "brands": {
@@ -136,26 +122,23 @@
         }
       }
     },
+
     "disposables": {
       "title": "🔥 Одноразки",
       "brands": {
         "vozol": {
           "title": "VOZOL",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Vozol_Gear.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/vozol.jpg.png",
           "items": [
             { "name": "Vozol Gear 10K", "price": 20 },
-            {
-              "name": "Vozol Star 12K",
-              "price": 25,
-              "photo_note_removed": true
-            },
+            { "name": "Vozol Star 12K", "price": 25 },
             { "name": "Vozol Vista 20K", "price": 35 },
             { "name": "Vozol 40K", "price": 47 }
           ]
         },
         "elfbar": {
           "title": "ELF BAR",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_Bar_20.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/elf_bar.png",
           "items": [
             { "name": "Elf Bar 20K", "price": 36 },
             { "name": "Elf Bar 23K", "price": 43 },
@@ -176,22 +159,20 @@
         },
         "hqd": {
           "title": "HQD",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/hqd_12k.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/hqd.png",
           "items": [
             { "name": "HQD 12K", "price": 25 }
           ]
         },
         "waka": {
           "title": "WAKA",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Waka10k.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Waka.jpg.png",
           "items": [
             { "name": "WAKA 10K", "price": 38 },
             {
               "name": "WAKA 25K",
               "price": 48,
-              "items": [
-                "🍇 Green Grape"
-              ]
+              "items": ["🍇 Green Grape"]
             }
           ]
         }
