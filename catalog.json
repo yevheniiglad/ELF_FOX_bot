@@ -89,7 +89,7 @@
         },
         "elfbar_pro_2": {
           "title": "Elf Bar Pro 2",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/elf_pro.pngjpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/elf_pro.png.jpg",
           "items": [
             { "name": "Elf Bar Pro 2", "price": 44 }
           ]
