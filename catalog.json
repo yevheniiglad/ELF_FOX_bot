@@ -49,6 +49,7 @@
             }
           ]
         },
+        "chaser_black": {
          "title": "🧪 Chaser Black",
           "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Chaser_black.jpg",
           "price_range": "19 EUR",
@@ -66,6 +67,7 @@
             { "name": "🍉 Watermelon Cherry", "price": 19 }
           ]
         }, 
+      "chaser_pods": {
       "title": "🧪 Chaser for Pods",
           "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/ Chaser_for_pods.jpg",
           "price_range": "19 EUR",
