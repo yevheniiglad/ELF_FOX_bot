@@ -23,7 +23,7 @@
             { "name": "🍉 Watermelon Cherry", "price": 19 }
           ]
         },
-        "chaser": {
+        "chaser_Lux": {
           "title": "⚡ CHASER LUX",
           "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Chaser_lux.jpg",
           "items": [
@@ -47,6 +47,40 @@
                 "🍓 Strawberry Cream"
               ]
             }
+          ]
+        },
+         "title": "🧪 Chaser Black",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Chaser_black.jpg",
+          "price_range": "19 EUR",
+          "items": [
+            { "name": "🍎 Apple Peach", "price": 19 },
+            { "name": "🍐 Apple Pear", "price": 19 },
+            { "name": "🍇 Blackcurrant Aniseed", "price": 19 },
+            { "name": "🫐 Blue Razz Lemonade", "price": 19 },
+            { "name": "🫐 Blueberry", "price": 19 },
+            { "name": "🍒 Cherry", "price": 19 },
+            { "name": "❄️ Peach Ice", "price": 19 },
+            { "name": "🍊 Pink Grapefruit", "price": 19 },
+            { "name": "🌿 Spearmint", "price": 19 },
+            { "name": "🍓 Strawberry Ice", "price": 19 },
+            { "name": "🍉 Watermelon Cherry", "price": 19 }
+          ]
+        }, 
+      "title": "🧪 Chaser for Pods",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/ Chaser_for_pods.jpg",
+          "price_range": "19 EUR",
+          "items": [
+            { "name": "🍎 Apple Peach", "price": 19 },
+            { "name": "🍐 Apple Pear", "price": 19 },
+            { "name": "🍇 Blackcurrant Aniseed", "price": 19 },
+            { "name": "🫐 Blue Razz Lemonade", "price": 19 },
+            { "name": "🫐 Blueberry", "price": 19 },
+            { "name": "🍒 Cherry", "price": 19 },
+            { "name": "❄️ Peach Ice", "price": 19 },
+            { "name": "🍊 Pink Grapefruit", "price": 19 },
+            { "name": "🌿 Spearmint", "price": 19 },
+            { "name": "🍓 Strawberry Ice", "price": 19 },
+            { "name": "🍉 Watermelon Cherry", "price": 19 }
           ]
         },
         "hqd": {
