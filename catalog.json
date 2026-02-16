@@ -3,11 +3,11 @@
   "categories": {
     "liquids": {
       "title": "💧 Рідини",
-      "photo": "photos/liquids.jpg",
+      "photo": "photos/liquid.jpg",
       "brands": {
         "elfliq": {
           "title": "🧪 ELFLIQ 5%",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/elfliq.1.jpg",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_Eberswalde_bot/main/photos/Elf_liq.jpg",
           "price_range": "19 EUR",
           "items": [
             { "name": "🍎 Apple Peach", "price": 19 },
