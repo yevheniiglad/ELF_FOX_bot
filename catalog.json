@@ -77,7 +77,7 @@
       "brands": {
         "vaporesso_xros": {
           "title": "Vaporesso XROS",
-          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Vaporesso.jpg.",
+          "photo": "https://raw.githubusercontent.com/yevheniiglad/ELF_FOX_bot/main/photos/Vaporesso.jpg",
           "items": [
             { "name": "Vaporesso XROS 4 Mini", "price": 36 },
             { "name": "Vaporesso XROS 4 Nano", "price": 45 },
