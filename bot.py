@@ -69,10 +69,8 @@ def get_courier_for_city(city: str) -> str:
 
 
 # ================== BEHAVIOR FLAGS ==================
-# Для цих категорій НЕ надсилати фото при виборі товару (тільки текст + кнопки)
 NO_ITEM_PHOTO_CATS = {"pods", "liquids"}
 
-# Анти-даблклік: якщо користувач часто тисне — щоб не було гонок
 USER_LOCKS: Dict[int, asyncio.Lock] = {}
 
 
@@ -328,7 +326,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     user_id = update.effective_user.id
 
-    # 1) Адмін вводить ETA
+    
     if context.user_data.get("awaiting_eta_key"):
         if not is_admin(user_id):
             context.user_data.pop("awaiting_eta_key", None)
@@ -353,7 +351,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 2) Клієнт вводить контакт/коментар для бронювання
+    
     if context.user_data.get("reserve_key"):
         key = context.user_data["reserve_key"]
         context.user_data.pop("reserve_key", None)
@@ -386,7 +384,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Дякую! Бронювання передано адміну.\n{eta_text}")
         return
 
-    # 3) Введення міста (коли OTHER)
+   
     if context.user_data.get("awaiting_city"):
         context.user_data["city"] = text
         context.user_data.pop("awaiting_city", None)
@@ -432,10 +430,10 @@ async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await smart_edit_or_reply(q, "❌ Вибрана категорія не знайдена.")
         return
 
-    # 1) Фото категорії (ОДНЕ)
+    
     await safe_send_photo(q.message, cat.get("photo"), caption=cat.get("title"))
 
-    # 2) Меню категорії
+    
     keyboard = []
     if "brands" in cat:
         for brand_key, brand in cat["brands"].items():
@@ -496,7 +494,7 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # normal dict items (name/price)
         elif isinstance(first, dict) and "name" in first:
             for idx, it in enumerate(items):
-                # ===== NEW: якщо у товару є "items" і це список смаків -> відкриваємо меню смаків
+               
                 has_flavors = isinstance(it, dict) and isinstance(it.get("items"), list) and len(it.get("items")) > 0
 
                 key_parent = item_key("brand", cat_key, brand_key, str(idx))
@@ -511,7 +509,7 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     continue
 
                 if has_flavors:
-                    # не додаємо в кошик одразу — відкриваємо смаки
+                    
                     label = f"{it['name']} — {fmt_price(it['price'])} ✅"
                     cb = f"flavors:{cat_key}:{brand_key}:{idx}"
                     keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
@@ -521,7 +519,7 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
 
         else:
-            # plain list of strings
+           
             for idx, name in enumerate(items):
                 keyboard.append([InlineKeyboardButton(str(name), callback_data=f"addb:{cat_key}:{brand_key}:{idx}")])
 
@@ -555,7 +553,7 @@ async def flavors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for fidx, fl in enumerate(flavors):
             fl_name = _extract_flavor_name(fl)
 
-            # stock по конкретному смаку (щоб було як nicotine)
+         
             key = item_key("flv", cat_key, brand_key, str(parent_idx_i), str(fidx))
             st = stock_get(key)
 
@@ -711,7 +709,7 @@ async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 base_name = parent.get("name", brand.get("title", ""))
                 item_name = f"{base_name} — {fl_name}".strip()
 
-                # фото: спочатку фото товару, потім бренду
+                
                 photo = parent.get("photo") or brand.get("photo")
                 cart.append({"name": item_name, "price": price})
 
