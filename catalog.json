@@ -154,35 +154,35 @@
         }
       }
     },
-    "cartridges": {
-      "title": "🔧 Картриджі",
+ "cartridges": {
+  "title": "🔧 Картриджі",
+  "photo": "photos/car1.png.jpg",
+  "brands": {
+    "xros": {
+      "title": "Vaporesso XROS",
       "photo": "photos/car1.png.jpg",
-      "brands": {
-        "xros": {
-          "title": "Vaporesso XROS",
-          "photo": "photos/car1.png.jpg",
-          "price_range": "8 EUR",
-          "items": [
-            { "name": "Картридж 0.4Ω", "price": 8 },
-            { "name": "Картридж 0.6Ω", "price": 8 },
-            { "name": "Картридж 0.8Ω", "price": 8 },
-            { "name": "Картридж 1.0Ω", "price": 8 },
-            { "name": "Картридж 1.2Ω", "price": 9 },
-          ]
-        },
-        "elfbar_pro": {
-          "title": "Elf Bar Pro",
-          "photo": "photos/car2.png.jpg",
-          "price_range": "8 EUR",
-          "items": [
-            { "name": "Картридж 0.4Ω", "price": 8 },
-            { "name": "Картридж 0.6Ω", "price": 8 },
-            { "name": "Картридж 0.8Ω", "price": 8 },
-            { "name": "Картридж 1.0Ω", "price": 8 },
-          ]
-        }
-      }
+      "price_range": "8 EUR",
+      "items": [
+        { "name": "Картридж 0.4Ω", "price": 8 },
+        { "name": "Картридж 0.6Ω", "price": 8 },
+        { "name": "Картридж 0.8Ω", "price": 8 },
+        { "name": "Картридж 1.0Ω", "price": 8 },
+        { "name": "Картридж 1.2Ω", "price": 9 }
+      ]
     },
+    "elfbar_pro": {
+      "title": "Elf Bar Pro",
+      "photo": "photos/car2.png.jpg",
+      "price_range": "8 EUR",
+      "items": [
+        { "name": "Картридж 0.4Ω", "price": 8 },
+        { "name": "Картридж 0.6Ω", "price": 8 },
+        { "name": "Картридж 0.8Ω", "price": 8 },
+        { "name": "Картридж 1.0Ω", "price": 8 }
+      ]
+    }
+  }
+},
     "disposables": {
       "title": "🔥 Одноразки",
       "photo": "photos/Elf_Bar1.png",
