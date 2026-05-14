@@ -4,7 +4,7 @@ import logging
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from telegram import (
     Update,
@@ -12,6 +12,7 @@ from telegram import (
     InlineKeyboardMarkup,
     InputFile,
 )
+from telegram.error import BadRequest
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -22,106 +23,151 @@ from telegram.ext import (
 )
 
 # ================== PATHS ==================
+
 BASE_DIR = Path(__file__).resolve().parent
 CATALOG_PATH = BASE_DIR / "catalog.json"
 STOCK_PATH = BASE_DIR / "stock.json"
-
-# ================== CONFIG ==================
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN not set")
-
-
-def get_admin_ids() -> List[int]:
-    ids: List[int] = []
-    for key in ("ADMIN_ID", "ADMIN_ID1"):
-        v = os.getenv(key)
-        if v and v.isdigit():
-            ids.append(int(v))
-    if not ids:
-        raise RuntimeError("ADMIN_ID variables not set correctly")
-    return ids
-
-
-ADMIN_IDS = get_admin_ids()
-
-# chat_id курʼєрів / груп
-COURIER_CHAT_IDS = {
-    "Leipzig": 8401636475,
-    "Dresden": 8501964969,
-    "Berlin": 8449852526,
-    "DEFAULT": 8449852526,
-}
-
-COURIERS = {
-    "Dresden": "@dresden_fox",
-    "Leipzig": "@leipzig_foxs",
-    "DEFAULT": "@courier_fox",
-}
-
-
-def get_courier_chat_id(city: str) -> int:
-    return COURIER_CHAT_IDS.get(city, COURIER_CHAT_IDS["DEFAULT"])
-
-
-def get_courier_for_city(city: str) -> str:
-    return COURIERS.get(city, COURIERS["DEFAULT"])
-
-
-# ================== BEHAVIOR FLAGS ==================
-NO_ITEM_PHOTO_CATS = {"pods", "liquids"}
-
-USER_LOCKS: Dict[int, asyncio.Lock] = {}
-
-
-def get_user_lock(user_id: int) -> asyncio.Lock:
-    lock = USER_LOCKS.get(user_id)
-    if lock is None:
-        lock = asyncio.Lock()
-        USER_LOCKS[user_id] = lock
-    return lock
-
+ORDERS_PATH = BASE_DIR / "orders.json"
 
 # ================== LOGGING ==================
+
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
     level=logging.INFO,
 )
 
-# ================== LOAD CATALOG ==================
-with open(CATALOG_PATH, "r", encoding="utf-8") as f:
-    CATALOG: Dict[str, Any] = json.load(f)
+# ================== CONFIG ==================
 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN is not set")
+
+
+def parse_admin_ids() -> List[int]:
+    raw = os.getenv("ADMIN_IDS", "")
+    ids: List[int] = []
+
+    for part in raw.replace(";", ",").split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+
+    if not ids:
+        # fallback, щоб не ламалося, якщо Railway variable ще не налаштована
+        ids = [7406405860, 721379009]
+
+    return ids
+
+
+ADMIN_IDS = parse_admin_ids()
+
+CITY_CONFIG = {
+    "Berlin": {
+        "title": "Берлін",
+        "courier_chat_id": 8449852526,
+        "courier_username": "@courier_fox",
+    },
+    "Leipzig": {
+        "title": "Лейпциг",
+        "courier_chat_id": 8401636475,
+        "courier_username": "@leipzig_foxs",
+    },
+    "Dresden": {
+        "title": "Дрезден",
+        "courier_chat_id": 8501964969,
+        "courier_username": "@dresden_fox",
+    },
+    "Other": {
+        "title": "Інше",
+        "courier_chat_id": 8449852526,
+        "courier_username": "@courier_fox",
+    },
+}
+
+NO_ITEM_PHOTO_CATS = {"pods", "liquids"}
+
+# ================== GLOBAL STATE ==================
+
+USER_LOCKS: Dict[int, asyncio.Lock] = {}
+STOCK_CACHE: Dict[str, Dict[str, Any]] = {}
+STOCK_LOCK = asyncio.Lock()
+
+# ================== FILE HELPERS ==================
+
+
+def read_json(path: Path, default: Any) -> Any:
+    try:
+        if not path.exists():
+            return default
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if data is not None else default
+
+    except Exception as e:
+        logging.exception("Failed to read JSON %s: %s", path, e)
+        return default
+
+
+def write_json(path: Path, data: Any) -> None:
+    try:
+        path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logging.exception("Failed to write JSON %s: %s", path, e)
+
+
+CATALOG: Dict[str, Any] = read_json(CATALOG_PATH, {})
 CURRENCY = CATALOG.get("currency", "EUR")
 
 
-# ================== STOCK CACHE (fast) ==================
-STOCK_CACHE: Dict[str, Dict[str, Any]] = {}
-STOCK_DIRTY = False
-
-
-def load_stock_cache() -> None:
+def load_stock() -> None:
     global STOCK_CACHE
-    if not STOCK_PATH.exists():
+    STOCK_CACHE = read_json(STOCK_PATH, {})
+    if not isinstance(STOCK_CACHE, dict):
         STOCK_CACHE = {}
-        return
+
+
+async def save_stock() -> None:
+    async with STOCK_LOCK:
+        write_json(STOCK_PATH, STOCK_CACHE)
+
+
+def save_order(order: Dict[str, Any]) -> None:
+    orders = read_json(ORDERS_PATH, [])
+    if not isinstance(orders, list):
+        orders = []
+
+    orders.append(order)
+    write_json(ORDERS_PATH, orders[-500:])
+
+# ================== BASIC HELPERS ==================
+
+
+def get_user_lock(user_id: int) -> asyncio.Lock:
+    if user_id not in USER_LOCKS:
+        USER_LOCKS[user_id] = asyncio.Lock()
+    return USER_LOCKS[user_id]
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_IDS
+
+
+def fmt_price(value: Any) -> str:
     try:
-        STOCK_CACHE = json.loads(STOCK_PATH.read_text(encoding="utf-8"))
-        if not isinstance(STOCK_CACHE, dict):
-            STOCK_CACHE = {}
+        return f"{float(value):g} {CURRENCY}"
     except Exception:
-        STOCK_CACHE = {}
+        return f"{value} {CURRENCY}"
 
 
-def save_stock_cache() -> None:
-    global STOCK_DIRTY
-    if not STOCK_DIRTY:
-        return
-    try:
-        STOCK_PATH.write_text(json.dumps(STOCK_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
-        STOCK_DIRTY = False
-    except Exception as e:
-        logging.exception("Failed to save stock.json: %s", e)
+def get_username(user) -> str:
+    return f"@{user.username}" if user.username else f"id:{user.id}"
+
+
+def item_key(*parts: Any) -> str:
+    return ":".join(str(p) for p in parts)
 
 
 def stock_get(key: str) -> Dict[str, Any]:
@@ -129,80 +175,13 @@ def stock_get(key: str) -> Dict[str, Any]:
 
 
 def stock_set(key: str, in_stock: bool, eta: Optional[str] = None) -> None:
-    global STOCK_DIRTY
-    STOCK_CACHE[key] = {"in_stock": in_stock, "eta": eta}
-    STOCK_DIRTY = True
+    STOCK_CACHE[key] = {
+        "in_stock": in_stock,
+        "eta": eta,
+    }
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
-
-
-def item_key(*parts: str) -> str:
-    return ":".join(parts)
-
-
-def _extract_flavor_name(fl: Any) -> str:
-    """Підтримка смаків як рядків або як dict {name: ...}."""
-    if isinstance(fl, str):
-        return fl
-    if isinstance(fl, dict):
-        return str(fl.get("name") or fl.get("title") or fl)
-    return str(fl)
-
-
-def resolve_item_by_key(key: str) -> Tuple[str, Optional[float]]:
-    """
-    Повертає (title, price) або (key, None) якщо не знайшли.
-
-    Формати ключів:
-      - cat:<cat_key>:<idx>
-      - brand:<cat_key>:<brand_key>:<idx>
-      - nic:<cat_key>:<brand_key>:<block_idx>:<flavor_idx>
-      - flv:<cat_key>:<brand_key>:<parent_idx>:<flavor_idx>    <-- NEW (смаки як підменю)
-    """
-    try:
-        parts = key.split(":")
-        t = parts[0]
-
-        if t == "cat":
-            _, cat_key, idx = parts
-            it = CATALOG["categories"][cat_key]["items"][int(idx)]
-            return it.get("name", key), it.get("price")
-
-        if t == "brand":
-            _, cat_key, brand_key, idx = parts
-            it = CATALOG["categories"][cat_key]["brands"][brand_key]["items"][int(idx)]
-            return it.get("name", key), it.get("price")
-
-        if t == "nic":
-            _, cat_key, brand_key, block_idx, flavor_idx = parts
-            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-            block = brand["items"][int(block_idx)]
-            flavor = block["items"][int(flavor_idx)]
-            title = f"{brand.get('title','')} {block.get('nicotine')} — {flavor}"
-            return title.strip(), block.get("price")
-
-        # ===== NEW: flavors submenu =====
-        if t == "flv":
-            _, cat_key, brand_key, parent_idx, flavor_idx = parts
-            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-            parent = brand["items"][int(parent_idx)]
-            flavors = parent.get("items", [])
-            fl = flavors[int(flavor_idx)]
-            fl_name = _extract_flavor_name(fl)
-            base_name = parent.get("name", brand.get("title", ""))
-            title = f"{base_name} — {fl_name}"
-            return title.strip(), parent.get("price")
-
-    except Exception:
-        pass
-
-    return key, None
-
-
-# ================== CART HELPERS ==================
-def get_cart(context: ContextTypes.DEFAULT_TYPE) -> List[Dict[str, Any]]:
+def cart_get(context: ContextTypes.DEFAULT_TYPE) -> List[Dict[str, Any]]:
     return context.user_data.setdefault("cart", [])
 
 
@@ -210,54 +189,148 @@ def cart_total(cart: List[Dict[str, Any]]) -> float:
     return round(sum(float(item["price"]) for item in cart), 2)
 
 
-def get_username(user) -> str:
-    return f"@{user.username}" if user.username else f"id:{user.id}"
+def extract_flavor_name(flavor: Any) -> str:
+    if isinstance(flavor, str):
+        return flavor
+
+    if isinstance(flavor, dict):
+        return str(
+            flavor.get("name")
+            or flavor.get("title")
+            or flavor.get("flavor")
+            or flavor
+        )
+
+    return str(flavor)
 
 
-# ================== PHOTO SENDER ==================
-def resolve_local_photo_path(path: str) -> str:
-    return str((BASE_DIR / path).resolve())
+def get_city_key(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return context.user_data.get("city_key", "Other")
 
 
-async def safe_send_photo(
-    message_or_chat,
-    path: Optional[str],
-    caption: Optional[str] = None,
-    reply_markup: Optional[InlineKeyboardMarkup] = None,
-) -> bool:
-    if not path:
-        return False
+def get_city_title(context: ContextTypes.DEFAULT_TYPE) -> str:
+    city_key = get_city_key(context)
+    custom_city = context.user_data.get("custom_city")
+
+    if city_key == "Other" and custom_city:
+        return custom_city
+
+    return CITY_CONFIG.get(city_key, CITY_CONFIG["Other"])["title"]
+
+
+def get_city_config(context: ContextTypes.DEFAULT_TYPE) -> Dict[str, Any]:
+    city_key = get_city_key(context)
+    return CITY_CONFIG.get(city_key, CITY_CONFIG["Other"])
+
+# ================== CLEAN CHAT ==================
+
+
+async def delete_message_safely(bot, chat_id: int, message_id: Optional[int]) -> None:
+    if not message_id:
+        return
 
     try:
-        p = path.strip()
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except BadRequest:
+        pass
+    except Exception as e:
+        logging.warning("Could not delete message %s: %s", message_id, e)
 
-        # URL
+
+async def clean_previous_bot_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    chat_id = update.effective_chat.id
+    last_id = context.user_data.get("last_bot_message_id")
+
+    await delete_message_safely(context.bot, chat_id, last_id)
+    context.user_data.pop("last_bot_message_id", None)
+
+
+async def clean_callback_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    q = update.callback_query
+    if not q or not q.message:
+        return
+
+    await delete_message_safely(
+        context.bot,
+        q.message.chat_id,
+        q.message.message_id,
+    )
+
+
+async def send_clean_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+) -> None:
+    chat_id = update.effective_chat.id
+
+    await clean_previous_bot_message(update, context)
+
+    msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=reply_markup,
+    )
+
+    context.user_data["last_bot_message_id"] = msg.message_id
+
+
+async def send_clean_photo(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    photo: str,
+    caption: str = "",
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+) -> bool:
+    chat_id = update.effective_chat.id
+
+    await clean_previous_bot_message(update, context)
+
+    try:
+        p = photo.strip()
+
         if p.startswith("http://") or p.startswith("https://"):
-            if hasattr(message_or_chat, "reply_photo"):
-                await message_or_chat.reply_photo(photo=p, caption=caption, reply_markup=reply_markup)
-            else:
-                await message_or_chat.send_photo(photo=p, caption=caption, reply_markup=reply_markup)
-            return True
+            msg = await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=p,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        else:
+            abs_path = (BASE_DIR / p).resolve()
+            if not abs_path.exists():
+                return False
 
-        # Local file
-        abs_path = resolve_local_photo_path(p)
-        if os.path.exists(abs_path):
-            file = InputFile(abs_path)
-            if hasattr(message_or_chat, "reply_photo"):
-                await message_or_chat.reply_photo(photo=file, caption=caption, reply_markup=reply_markup)
-            else:
-                await message_or_chat.send_photo(photo=file, caption=caption, reply_markup=reply_markup)
-            return True
+            msg = await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=InputFile(abs_path),
+                caption=caption,
+                reply_markup=reply_markup,
+            )
 
-        logging.warning("Photo not found: %s (resolved: %s)", p, abs_path)
-        return False
+        context.user_data["last_bot_message_id"] = msg.message_id
+        return True
 
     except Exception as e:
-        logging.exception("Failed to send photo %s: %s", path, e)
+        logging.exception("Failed to send photo: %s", e)
         return False
 
+# ================== KEYBOARDS ==================
 
-# ================== UI BUILDERS ==================
+
+def kb_city() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📍 Берлін", callback_data="city:Berlin")],
+        [InlineKeyboardButton("📍 Лейпциг", callback_data="city:Leipzig")],
+        [InlineKeyboardButton("📍 Дрезден", callback_data="city:Dresden")],
+        [InlineKeyboardButton("✍️ Інше місто", callback_data="city:Other")],
+    ])
+
+
 def kb_main() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
@@ -269,777 +342,1074 @@ def kb_after_add() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Додати ще", callback_data="catalog")],
         [InlineKeyboardButton("🛒 Кошик", callback_data="cart")],
-        [InlineKeyboardButton("⬅ На головну", callback_data="start")],
+        [InlineKeyboardButton("⬅ На головну", callback_data="main")],
     ])
 
+# ================== ITEM RESOLVER ==================
 
-def fmt_price(p: Any) -> str:
+
+def resolve_item(key: str) -> Optional[Dict[str, Any]]:
     try:
-        return f"{float(p):g} {CURRENCY}"
-    except Exception:
-        return f"{p} {CURRENCY}"
+        parts = key.split(":")
+        kind = parts[0]
+
+        if kind == "cat":
+            _, cat_key, idx = parts
+            item = CATALOG["categories"][cat_key]["items"][int(idx)]
+            return {
+                "key": key,
+                "name": item["name"],
+                "price": float(item["price"]),
+                "photo": item.get("photo"),
+                "cat_key": cat_key,
+            }
+
+        if kind == "brand":
+            _, cat_key, brand_key, idx = parts
+            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+            item = brand["items"][int(idx)]
+            return {
+                "key": key,
+                "name": item["name"],
+                "price": float(item["price"]),
+                "photo": item.get("photo") or brand.get("photo"),
+                "cat_key": cat_key,
+            }
+
+        if kind == "nic":
+            _, cat_key, brand_key, block_idx, flavor_idx = parts
+            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+            block = brand["items"][int(block_idx)]
+            flavor = block["items"][int(flavor_idx)]
+            name = f"{brand.get('title', '')} {block.get('nicotine', '')} — {flavor}".strip()
+
+            return {
+                "key": key,
+                "name": name,
+                "price": float(block["price"]),
+                "photo": brand.get("photo"),
+                "cat_key": cat_key,
+            }
+
+        if kind == "flv":
+            _, cat_key, brand_key, parent_idx, flavor_idx = parts
+            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+            parent = brand["items"][int(parent_idx)]
+            flavor = parent["items"][int(flavor_idx)]
+            flavor_name = extract_flavor_name(flavor)
+            base_name = parent.get("name", brand.get("title", ""))
+            name = f"{base_name} — {flavor_name}".strip()
+
+            return {
+                "key": key,
+                "name": name,
+                "price": float(parent["price"]),
+                "photo": parent.get("photo") or brand.get("photo"),
+                "cat_key": cat_key,
+            }
+
+    except Exception as e:
+        logging.exception("resolve_item failed for key=%s: %s", key, e)
+
+    return None
 
 
-# ================== SMART EDIT / REPLY ==================
-async def smart_edit_or_reply(q, text: str, reply_markup: Optional[InlineKeyboardMarkup] = None):
-    """
-    Гарантовано показує меню незалежно від того, під яким повідомленням натиснули кнопку:
-    - якщо це текстове повідомлення -> edit_message_text
-    - якщо це фото/інші типи -> reply_text (бо edit_message_text не можна)
-    """
-    try:
-        await q.edit_message_text(text, reply_markup=reply_markup)
-    except Exception:
-        await q.message.reply_text(text, reply_markup=reply_markup)
+def stock_button_label(name: str, price: Any, key: str) -> Tuple[str, str]:
+    st = stock_get(key)
+
+    if st.get("in_stock", True):
+        return f"{name} — {fmt_price(price)} ✅", f"add:{key}"
+
+    eta = st.get("eta")
+    eta_txt = f" (з {eta})" if eta else ""
+    return f"{name} — {fmt_price(price)} ❌{eta_txt}", f"reserve:{key}"
+
+# ================== START / CITY ==================
 
 
-# ================== START & CITY ==================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.clear()
-    keyboard = [
-        [InlineKeyboardButton("📍 Берлін", callback_data="city:Berlin")],
-        [InlineKeyboardButton("📍 Дрезден", callback_data="city:Dresden")],
-        [InlineKeyboardButton("📍 Лейпциг", callback_data="city:Leipzig")],
-        [InlineKeyboardButton("✍️ Інше місто", callback_data="city:OTHER")],
-    ]
-    text = "📍 Звідки ви?\nОберіть місто:"
-    if update.message:
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-    else:
-        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    await send_clean_text(
+        update,
+        context,
+        "📍 Звідки ви?\nОберіть місто:",
+        kb_city(),
+    )
 
 
-async def city_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def city_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
-    city = q.data.split(":", 1)[1]
 
-    if city == "OTHER":
+    await clean_callback_message(update, context)
+
+    city_key = q.data.split(":", 1)[1]
+
+    if city_key == "Other":
         context.user_data["awaiting_city"] = True
-        await smart_edit_or_reply(q, "✍️ Напишіть, будь ласка, назву вашого міста:")
-    else:
-        context.user_data["city"] = city
-        await show_main_menu(q, context)
+        context.user_data["city_key"] = "Other"
+
+        await send_clean_text(
+            update,
+            context,
+            "✍️ Напишіть назву вашого міста:",
+        )
+        return
+
+    context.user_data["city_key"] = city_key
+    context.user_data.pop("custom_city", None)
+
+    await show_main_menu(update, context)
+
+# ================== TEXT ROUTER ==================
 
 
-async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (update.message.text or "").strip()
     user_id = update.effective_user.id
 
-    
+    if context.user_data.get("awaiting_city"):
+        context.user_data["custom_city"] = text
+        context.user_data["city_key"] = "Other"
+        context.user_data.pop("awaiting_city", None)
+
+        await delete_message_safely(
+            context.bot,
+            update.effective_chat.id,
+            update.message.message_id,
+        )
+
+        await show_main_menu(update, context)
+        return
+
     if context.user_data.get("awaiting_eta_key"):
         if not is_admin(user_id):
             context.user_data.pop("awaiting_eta_key", None)
             return
 
         eta = text
+
         try:
             datetime.strptime(eta, "%Y-%m-%d")
         except ValueError:
-            await update.message.reply_text("❌ Невірний формат. Треба YYYY-MM-DD (наприклад 2026-01-20).")
+            await send_clean_text(
+                update,
+                context,
+                "❌ Невірний формат.\nТреба YYYY-MM-DD, наприклад 2026-01-20.",
+            )
             return
 
-        key = context.user_data["awaiting_eta_key"]
-        stock_set(key, in_stock=False, eta=eta)
-        save_stock_cache()
-        context.user_data.pop("awaiting_eta_key", None)
+        key = context.user_data.pop("awaiting_eta_key")
+        item = resolve_item(key)
 
-        title, price = resolve_item_by_key(key)
-        extra = f" — {fmt_price(price)}" if price is not None else ""
-        await update.message.reply_text(
-            f"✅ Позначено як ❌ Нема в наявності.\nТовар: {title}{extra}\nОчікується з: {eta}"
+        stock_set(key, in_stock=False, eta=eta)
+        await save_stock()
+
+        title = item["name"] if item else key
+        price = fmt_price(item["price"]) if item else "—"
+
+        await delete_message_safely(
+            context.bot,
+            update.effective_chat.id,
+            update.message.message_id,
+        )
+
+        await send_clean_text(
+            update,
+            context,
+            f"✅ Позначено як ❌ Нема в наявності.\n\n"
+            f"🧾 {title}\n"
+            f"💶 {price}\n"
+            f"🗓 Очікується з: {eta}",
         )
         return
 
-    
     if context.user_data.get("reserve_key"):
-        key = context.user_data["reserve_key"]
-        context.user_data.pop("reserve_key", None)
-
-        city = context.user_data.get("city", "Невідомо")
+        key = context.user_data.pop("reserve_key")
+        item = resolve_item(key)
         st = stock_get(key)
         eta = st.get("eta")
 
-        title, price = resolve_item_by_key(key)
-        price_txt = fmt_price(price) if price is not None else "—"
+        title = item["name"] if item else key
+        price = fmt_price(item["price"]) if item else "—"
+        city = get_city_title(context)
 
-        admin_text = (
+        reservation_text = (
             "📌 НОВЕ БРОНЮВАННЯ\n\n"
             f"👤 Клієнт: {get_username(update.effective_user)}\n"
             f"ID: {update.effective_user.id}\n"
             f"📍 Місто: {city}\n\n"
             f"🧾 Товар: {title}\n"
-            f"💶 Ціна: {price_txt}\n"
+            f"💶 Ціна: {price}\n"
             f"🗓 Очікується з: {eta or 'не вказано'}\n\n"
             f"💬 Контакт/коментар: {text}"
         )
 
         for admin_id in ADMIN_IDS:
-            try:
-                await context.bot.send_message(chat_id=admin_id, text=admin_text)
-            except Exception as e:
-                logging.exception("Failed to send reservation to admin %s: %s", admin_id, e)
+            await send_message_safely(context, admin_id, reservation_text)
 
-        eta_text = f"Очікується з {eta}." if eta else "Дата надходження ще не вказана."
-        await update.message.reply_text(f"✅ Дякую! Бронювання передано адміну.\n{eta_text}")
+        await delete_message_safely(
+            context.bot,
+            update.effective_chat.id,
+            update.message.message_id,
+        )
+
+        await send_clean_text(
+            update,
+            context,
+            "✅ Дякую! Бронювання передано адміну.\n"
+            f"{'Очікується з ' + eta if eta else 'Дата надходження ще не вказана.'}",
+            kb_main(),
+        )
         return
 
-   
-    if context.user_data.get("awaiting_city"):
-        context.user_data["city"] = text
-        context.user_data.pop("awaiting_city", None)
-        await show_main_menu(update, context)
-        return
+# ================== MENU ==================
 
 
-# ================== MAIN MENU ==================
-async def show_main_menu(update_or_query, context: Optional[ContextTypes.DEFAULT_TYPE] = None):
-    text = "Вітаю 👋\nОберіть дію:"
-    if hasattr(update_or_query, "edit_message_text"):
-        await smart_edit_or_reply(update_or_query, text, reply_markup=kb_main())
-    elif hasattr(update_or_query, "message"):
-        await update_or_query.message.reply_text(text, reply_markup=kb_main())
+async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    city = get_city_title(context)
+
+    await send_clean_text(
+        update,
+        context,
+        f"Вітаю 👋\nВаше місто: {city}\n\nОберіть дію:",
+        kb_main(),
+    )
 
 
-async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
-    await show_main_menu(q, context)
 
+    await clean_callback_message(update, context)
+    await show_main_menu(update, context)
 
 # ================== CATALOG ==================
-async def catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
+
+    await clean_callback_message(update, context)
+
+    if not context.user_data.get("city_key"):
+        await start(update, context)
+        return
 
     keyboard = []
-    for cat_key, cat_data in CATALOG["categories"].items():
-        keyboard.append([InlineKeyboardButton(cat_data["title"], callback_data=f"category:{cat_key}")])
-    keyboard.append([InlineKeyboardButton("⬅ На головну", callback_data="start")])
 
-    await smart_edit_or_reply(q, "🛍 Каталог\nОберіть категорію:", reply_markup=InlineKeyboardMarkup(keyboard))
+    for cat_key, cat in CATALOG.get("categories", {}).items():
+        keyboard.append([
+            InlineKeyboardButton(
+                cat.get("title", cat_key),
+                callback_data=f"category:{cat_key}",
+            )
+        ])
+
+    keyboard.append([InlineKeyboardButton("⬅ На головну", callback_data="main")])
+
+    await send_clean_text(
+        update,
+        context,
+        "🛍 Каталог\nОберіть категорію:",
+        InlineKeyboardMarkup(keyboard),
+    )
 
 
-async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
+
+    await clean_callback_message(update, context)
 
     cat_key = q.data.split(":", 1)[1]
-    cat = CATALOG["categories"].get(cat_key)
+    cat = CATALOG.get("categories", {}).get(cat_key)
+
     if not cat:
-        await smart_edit_or_reply(q, "❌ Вибрана категорія не знайдена.")
+        await send_clean_text(update, context, "❌ Категорію не знайдено.", kb_main())
         return
 
-    
-    await safe_send_photo(q.message, cat.get("photo"), caption=cat.get("title"))
-
-    
     keyboard = []
+
     if "brands" in cat:
         for brand_key, brand in cat["brands"].items():
-            label = brand.get("title", brand_key)
-            keyboard.append([InlineKeyboardButton(label, callback_data=f"brand:{cat_key}:{brand_key}")])
+            keyboard.append([
+                InlineKeyboardButton(
+                    brand.get("title", brand_key),
+                    callback_data=f"brand:{cat_key}:{brand_key}",
+                )
+            ])
+
     else:
         for idx, item in enumerate(cat.get("items", [])):
-            key = item_key("cat", cat_key, str(idx))
-            st = stock_get(key)
-            if st.get("in_stock", True):
-                label = f"{item['name']} — {fmt_price(item['price'])} ✅"
-                cb = f"add:{cat_key}:{idx}"
-            else:
-                eta = st.get("eta")
-                eta_txt = f" (з {eta})" if eta else ""
-                label = f"{item['name']} — {fmt_price(item['price'])} ❌{eta_txt}"
-                cb = f"reserve:{key}"
-            keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+            key = item_key("cat", cat_key, idx)
+            label, callback = stock_button_label(item["name"], item["price"], key)
+            keyboard.append([InlineKeyboardButton(label, callback_data=callback)])
 
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="catalog")])
-    await q.message.reply_text("Оберіть:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    text = f"🛍 {cat.get('title', 'Категорія')}\nОберіть:"
+    markup = InlineKeyboardMarkup(keyboard)
+
+    photo = cat.get("photo")
+    if photo:
+        sent = await send_clean_photo(update, context, photo, text, markup)
+        if sent:
+            return
+
+    await send_clean_text(update, context, text, markup)
 
 
-async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
+    await clean_callback_message(update, context)
+
     _, cat_key, brand_key = q.data.split(":", 2)
-    cat = CATALOG["categories"].get(cat_key)
-    if not cat or "brands" not in cat:
-        await smart_edit_or_reply(q, "❌ Бренд не знайдено.")
+
+    try:
+        cat = CATALOG["categories"][cat_key]
+        brand = cat["brands"][brand_key]
+    except Exception:
+        await send_clean_text(update, context, "❌ Бренд не знайдено.", kb_main())
         return
 
-    brand = cat["brands"].get(brand_key)
-    if not brand:
-        await smart_edit_or_reply(q, "❌ Бренд не знайдено.")
-        return
-
-    caption = brand.get("title", "")
-    pr = brand.get("price_range")
-    if pr:
-        caption = f"{caption}\n💶 {pr}"
-
-    await safe_send_photo(q.message, brand.get("photo"), caption=caption)
-
-    items = brand.get("items", [])
     keyboard = []
+    items = brand.get("items", [])
 
     if items:
         first = items[0]
 
-        # nicotine blocks
         if isinstance(first, dict) and "nicotine" in first and "items" in first:
             for idx, block in enumerate(items):
-                label = f"{block.get('nicotine')} — {fmt_price(block.get('price'))}"
-                keyboard.append([InlineKeyboardButton(label, callback_data=f"nic:{cat_key}:{brand_key}:{idx}")])
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{block.get('nicotine')} — {fmt_price(block.get('price'))}",
+                        callback_data=f"nic:{cat_key}:{brand_key}:{idx}",
+                    )
+                ])
 
-        # normal dict items (name/price)
         elif isinstance(first, dict) and "name" in first:
-            for idx, it in enumerate(items):
-               
-                has_flavors = isinstance(it, dict) and isinstance(it.get("items"), list) and len(it.get("items")) > 0
-
-                key_parent = item_key("brand", cat_key, brand_key, str(idx))
-                st = stock_get(key_parent)
-
-                if not st.get("in_stock", True):
-                    eta = st.get("eta")
-                    eta_txt = f" (з {eta})" if eta else ""
-                    label = f"{it['name']} — {fmt_price(it['price'])} ❌{eta_txt}"
-                    cb = f"reserve:{key_parent}"
-                    keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
-                    continue
+            for idx, item in enumerate(items):
+                has_flavors = isinstance(item.get("items"), list) and bool(item.get("items"))
 
                 if has_flavors:
-                    
-                    label = f"{it['name']} — {fmt_price(it['price'])} ✅"
-                    cb = f"flavors:{cat_key}:{brand_key}:{idx}"
-                    keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"{item['name']} — {fmt_price(item['price'])}",
+                            callback_data=f"flavors:{cat_key}:{brand_key}:{idx}",
+                        )
+                    ])
                 else:
-                    label = f"{it['name']} — {fmt_price(it['price'])} ✅"
-                    cb = f"addb:{cat_key}:{brand_key}:{idx}"
-                    keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+                    key = item_key("brand", cat_key, brand_key, idx)
+                    label, callback = stock_button_label(item["name"], item["price"], key)
+                    keyboard.append([InlineKeyboardButton(label, callback_data=callback)])
 
         else:
-           
             for idx, name in enumerate(items):
-                keyboard.append([InlineKeyboardButton(str(name), callback_data=f"addb:{cat_key}:{brand_key}:{idx}")])
+                key = item_key("brand", cat_key, brand_key, idx)
+                label, callback = stock_button_label(str(name), brand.get("price", 0), key)
+                keyboard.append([InlineKeyboardButton(label, callback_data=callback)])
 
     keyboard.append([InlineKeyboardButton("🛒 Кошик", callback_data="cart")])
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"category:{cat_key}")])
-    await q.message.reply_text("Оберіть:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    caption = brand.get("title", brand_key)
+    if brand.get("price_range"):
+        caption += f"\n💶 {brand['price_range']}"
+
+    markup = InlineKeyboardMarkup(keyboard)
+    photo = brand.get("photo")
+
+    if photo:
+        sent = await send_clean_photo(update, context, photo, caption, markup)
+        if sent:
+            return
+
+    await send_clean_text(update, context, caption, markup)
 
 
-# ================== NEW: FLAVORS MENU ==================
-async def flavors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Відкриває список смаків для конкретного товару бренду:
-    callback: flavors:<cat_key>:<brand_key>:<parent_idx>
-    """
+async def nicotine_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
-    _, cat_key, brand_key, parent_idx = q.data.split(":", 3)
-    parent_idx_i = int(parent_idx)
+    await clean_callback_message(update, context)
+
+    _, cat_key, brand_key, block_idx = q.data.split(":", 3)
 
     try:
         brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-        parent = brand["items"][parent_idx_i]
+        block = brand["items"][int(block_idx)]
+    except Exception:
+        await send_clean_text(update, context, "❌ Позицію не знайдено.", kb_main())
+        return
 
-        flavors = parent.get("items", [])
-        if not isinstance(flavors, list) or not flavors:
-            await q.message.reply_text("❌ Для цього товару немає смаків.")
-            return
+    keyboard = []
 
-        keyboard = []
-        for fidx, fl in enumerate(flavors):
-            fl_name = _extract_flavor_name(fl)
+    for idx, flavor in enumerate(block.get("items", [])):
+        key = item_key("nic", cat_key, brand_key, block_idx, idx)
+        item = resolve_item(key)
+        name = item["name"] if item else str(flavor)
+        label, callback = stock_button_label(name, block["price"], key)
 
-         
-            key = item_key("flv", cat_key, brand_key, str(parent_idx_i), str(fidx))
-            st = stock_get(key)
+        # коротше для кнопки
+        if stock_get(key).get("in_stock", True):
+            label = f"{flavor} ✅"
+        else:
+            eta = stock_get(key).get("eta")
+            label = f"{flavor} ❌" + (f" (з {eta})" if eta else "")
 
-            if st.get("in_stock", True):
-                label = f"{fl_name} ✅"
-                cb = f"addf:{cat_key}:{brand_key}:{parent_idx_i}:{fidx}"
-            else:
-                eta = st.get("eta")
-                eta_txt = f" (з {eta})" if eta else ""
-                label = f"{fl_name} ❌{eta_txt}"
-                cb = f"reserve:{key}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=callback)])
 
-            keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+    keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"brand:{cat_key}:{brand_key}")])
 
-        keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"brand:{cat_key}:{brand_key}")])
-        await q.message.reply_text("Оберіть смак:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    except Exception as e:
-        logging.exception("flavors_handler error: %s", e)
-        await q.message.reply_text("❌ Сталась помилка при відкритті смаків.")
+    await send_clean_text(
+        update,
+        context,
+        "Оберіть смак:",
+        InlineKeyboardMarkup(keyboard),
+    )
 
 
-async def nicotine_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def flavors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
-    _, cat_key, brand_key, block_idx = q.data.split(":", 3)
-    brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-    block = brand["items"][int(block_idx)]
+    await clean_callback_message(update, context)
+
+    _, cat_key, brand_key, parent_idx = q.data.split(":", 3)
+
+    try:
+        brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+        parent = brand["items"][int(parent_idx)]
+        flavors = parent.get("items", [])
+    except Exception:
+        await send_clean_text(update, context, "❌ Смаки не знайдено.", kb_main())
+        return
 
     keyboard = []
-    for idx, flavor in enumerate(block["items"]):
-        key = item_key("nic", cat_key, brand_key, str(block_idx), str(idx))
+
+    for idx, flavor in enumerate(flavors):
+        flavor_name = extract_flavor_name(flavor)
+        key = item_key("flv", cat_key, brand_key, parent_idx, idx)
         st = stock_get(key)
 
         if st.get("in_stock", True):
-            label = f"{flavor} ✅"
-            cb = f"addn:{cat_key}:{brand_key}:{block_idx}:{idx}"
+            label = f"{flavor_name} ✅"
+            callback = f"add:{key}"
         else:
             eta = st.get("eta")
-            eta_txt = f" (з {eta})" if eta else ""
-            label = f"{flavor} ❌{eta_txt}"
-            cb = f"reserve:{key}"
+            label = f"{flavor_name} ❌" + (f" (з {eta})" if eta else "")
+            callback = f"reserve:{key}"
 
-        keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+        keyboard.append([InlineKeyboardButton(label, callback_data=callback)])
 
     keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"brand:{cat_key}:{brand_key}")])
-    await q.message.reply_text("Оберіть смак:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-
-# ================== RESERVE ==================
-async def reserve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-
-    key = q.data.split(":", 1)[1]
-    st = stock_get(key)
-    eta = st.get("eta")
-
-    title, price = resolve_item_by_key(key)
-    price_txt = fmt_price(price) if price is not None else "—"
-
-    context.user_data["reserve_key"] = key
-    eta_text = f"Очікується з: {eta}" if eta else "Очікується (дату уточнюйте)"
-
-    await smart_edit_or_reply(
-        q,
-        f"📌 Бронювання\n\n"
-        f"🧾 {title}\n"
-        f"💶 {price_txt}\n"
-        f"🗓 {eta_text}\n\n"
-        "✍️ Напишіть контакт/коментар (телефон, месенджер, коли зручно):"
+    await send_clean_text(
+        update,
+        context,
+        f"{parent.get('name', 'Товар')}\nОберіть смак:",
+        InlineKeyboardMarkup(keyboard),
     )
 
-
-# ================== ADD TO CART ==================
-async def send_item_confirmation(q, item_name: str, price: float, photo: Optional[str], force_no_photo: bool):
-    text = (
-        "✅ Додано в кошик\n\n"
-        f"🧾 {item_name}\n"
-        f"💶 {fmt_price(price)}"
-    )
-
-    if force_no_photo:
-        await q.message.reply_text(text, reply_markup=kb_after_add())
-        return
-
-    sent = await safe_send_photo(q.message, photo, caption=text, reply_markup=kb_after_add())
-    if not sent:
-        await q.message.reply_text(text, reply_markup=kb_after_add())
+# ================== ADD / RESERVE ==================
 
 
-async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_to_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
     user_id = q.from_user.id
     lock = get_user_lock(user_id)
 
-    if lock.locked():
-        await q.answer("⏳ Зачекайте…", show_alert=False)
-
     async with lock:
-        parts = q.data.split(":")
-        cart = get_cart(context)
+        await clean_callback_message(update, context)
 
-        item_name = ""
-        price: Optional[float] = None
-        photo: Optional[str] = None
-        selected_cat_key: Optional[str] = None
+        key = q.data.split(":", 1)[1]
+        item = resolve_item(key)
 
-        try:
-            if parts[0] == "add":
-                _, cat_key, idx = parts
-                selected_cat_key = cat_key
-                item = CATALOG["categories"][cat_key]["items"][int(idx)]
-                item_name = item["name"]
-                price = float(item["price"])
-                photo = item.get("photo")
-                cart.append({"name": item_name, "price": price})
-
-            elif parts[0] == "addb":
-                _, cat_key, brand_key, idx = parts
-                selected_cat_key = cat_key
-                item = CATALOG["categories"][cat_key]["brands"][brand_key]["items"][int(idx)]
-                item_name = item["name"]
-                price = float(item["price"])
-                photo = item.get("photo") or CATALOG["categories"][cat_key]["brands"][brand_key].get("photo")
-                cart.append({"name": item_name, "price": price})
-
-            elif parts[0] == "addn":
-                _, cat_key, brand_key, block_idx, flavor_idx = parts
-                selected_cat_key = cat_key
-                brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-                block = brand["items"][int(block_idx)]
-                flavor = block["items"][int(flavor_idx)]
-                price = float(block["price"])
-                item_name = f"{brand.get('title','')} {block.get('nicotine')} — {flavor}".strip()
-                photo = brand.get("photo")
-                cart.append({"name": item_name, "price": price})
-
-            # ===== NEW: add flavor from brand item =====
-            elif parts[0] == "addf":
-                _, cat_key, brand_key, parent_idx, flavor_idx = parts
-                selected_cat_key = cat_key
-                brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-                parent = brand["items"][int(parent_idx)]
-                flavors = parent.get("items", [])
-                fl = flavors[int(flavor_idx)]
-                fl_name = _extract_flavor_name(fl)
-
-                price = float(parent["price"])
-                base_name = parent.get("name", brand.get("title", ""))
-                item_name = f"{base_name} — {fl_name}".strip()
-
-                
-                photo = parent.get("photo") or brand.get("photo")
-                cart.append({"name": item_name, "price": price})
-
-            else:
-                await q.message.reply_text("❌ Невідома дія.")
-                return
-
-        except Exception as e:
-            logging.exception("add_to_cart_handler error: %s", e)
-            await q.message.reply_text("❌ Сталась помилка. Спробуйте ще раз.")
+        if not item:
+            await send_clean_text(update, context, "❌ Товар не знайдено.", kb_main())
             return
 
-        force_no_photo = (selected_cat_key in NO_ITEM_PHOTO_CATS)
-        await send_item_confirmation(
-            q,
-            item_name=item_name,
-            price=float(price),
-            photo=photo,
-            force_no_photo=force_no_photo
+        st = stock_get(key)
+        if not st.get("in_stock", True):
+            await send_clean_text(
+                update,
+                context,
+                "❌ Цей товар уже не в наявності.",
+                kb_main(),
+            )
+            return
+
+        cart = cart_get(context)
+        cart.append({
+            "key": item["key"],
+            "name": item["name"],
+            "price": item["price"],
+        })
+
+        text = (
+            "✅ Додано в кошик\n\n"
+            f"🧾 {item['name']}\n"
+            f"💶 {fmt_price(item['price'])}"
         )
 
+        force_no_photo = item["cat_key"] in NO_ITEM_PHOTO_CATS
+
+        if item.get("photo") and not force_no_photo:
+            sent = await send_clean_photo(
+                update,
+                context,
+                item["photo"],
+                text,
+                kb_after_add(),
+            )
+            if sent:
+                return
+
+        await send_clean_text(update, context, text, kb_after_add())
+
+
+async def reserve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    q = update.callback_query
+    await q.answer()
+
+    await clean_callback_message(update, context)
+
+    key = q.data.split(":", 1)[1]
+    item = resolve_item(key)
+
+    if not item:
+        await send_clean_text(update, context, "❌ Товар не знайдено.", kb_main())
+        return
+
+    st = stock_get(key)
+    eta = st.get("eta")
+
+    context.user_data["reserve_key"] = key
+
+    await send_clean_text(
+        update,
+        context,
+        "📌 Бронювання\n\n"
+        f"🧾 {item['name']}\n"
+        f"💶 {fmt_price(item['price'])}\n"
+        f"🗓 Очікується: {eta or 'дату уточнюйте'}\n\n"
+        "✍️ Напишіть контакт або коментар:",
+    )
 
 # ================== CART ==================
-async def cart_view_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
-    cart = get_cart(context)
+    await clean_callback_message(update, context)
+
+    cart = cart_get(context)
+
     if not cart:
-        await smart_edit_or_reply(
-            q,
-            "🛒 Кошик порожній.\n\nНатисніть «Каталог», щоб додати товари.",
-            reply_markup=InlineKeyboardMarkup([
+        await send_clean_text(
+            update,
+            context,
+            "🛒 Кошик порожній.",
+            InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
-                [InlineKeyboardButton("⬅ На головну", callback_data="start")],
-            ])
+                [InlineKeyboardButton("⬅ На головну", callback_data="main")],
+            ]),
         )
         return
 
-    lines = [f"{i+1}. {item['name']} — {fmt_price(item['price'])}" for i, item in enumerate(cart)]
-    text = "🛒 Ваше замовлення:\n\n" + "\n".join(lines)
-    text += f"\n\n💰 Разом: {fmt_price(cart_total(cart))}"
+    lines = [
+        f"{idx + 1}. {item['name']} — {fmt_price(item['price'])}"
+        for idx, item in enumerate(cart)
+    ]
 
-    kb = InlineKeyboardMarkup([
+    keyboard = [
         [InlineKeyboardButton("➕ Додати ще", callback_data="catalog")],
-        [InlineKeyboardButton("➖ Прибрати 1 товар", callback_data="remove_one")],
+        [InlineKeyboardButton("➖ Прибрати останній товар", callback_data="remove_last")],
+        [InlineKeyboardButton("🗑 Очистити кошик", callback_data="clear_cart")],
         [InlineKeyboardButton("✅ Оформити", callback_data="checkout")],
-        [InlineKeyboardButton("⬅ На головну", callback_data="start")],
-    ])
+        [InlineKeyboardButton("⬅ На головну", callback_data="main")],
+    ]
 
-    await smart_edit_or_reply(q, text, reply_markup=kb)
+    await send_clean_text(
+        update,
+        context,
+        "🛒 Ваше замовлення:\n\n"
+        + "\n".join(lines)
+        + f"\n\n💰 Разом: {fmt_price(cart_total(cart))}",
+        InlineKeyboardMarkup(keyboard),
+    )
 
 
-async def remove_one_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def remove_last_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
-    cart = get_cart(context)
-    if not cart:
-        await smart_edit_or_reply(q, "🛒 Кошик порожній.", reply_markup=kb_main())
-        return
+    cart = cart_get(context)
 
-    removed = cart.pop()
-    await q.message.reply_text(f"➖ Прибрано: {removed['name']}")
-    await cart_view_handler(update, context)
+    if cart:
+        cart.pop()
 
+    await cart_handler(update, context)
+
+
+async def clear_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    q = update.callback_query
+    await q.answer()
+
+    context.user_data["cart"] = []
+
+    await clean_callback_message(update, context)
+    await send_clean_text(update, context, "🗑 Кошик очищено.", kb_main())
 
 # ================== CHECKOUT ==================
-async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def send_message_safely(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    text: str,
+) -> None:
+    try:
+        await context.bot.send_message(chat_id=chat_id, text=text)
+    except Exception as e:
+        logging.exception("Failed to send message to %s: %s", chat_id, e)
+
+
+async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
-    user = q.from_user
-    cart = get_cart(context)
+    await clean_callback_message(update, context)
+
+    cart = cart_get(context)
+
     if not cart:
-        await smart_edit_or_reply(q, "🛒 Кошик порожній.", reply_markup=kb_main())
+        await send_clean_text(update, context, "🛒 Кошик порожній.", kb_main())
         return
 
-    city = context.user_data.get("city", "Невідомо")
+    unavailable = []
+
+    for item in cart:
+        st = stock_get(item["key"])
+        if not st.get("in_stock", True):
+            unavailable.append(item["name"])
+
+    if unavailable:
+        await send_clean_text(
+            update,
+            context,
+            "❌ Деякі товари вже не в наявності:\n\n"
+            + "\n".join(f"• {name}" for name in unavailable)
+            + "\n\nБудь ласка, оновіть кошик.",
+            kb_main(),
+        )
+        return
+
+    user = q.from_user
+    city = get_city_title(context)
+    city_cfg = get_city_config(context)
     timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+    order_id = f"{user.id}-{int(datetime.now().timestamp())}"
+
+    items_text = "\n".join(
+        f"• {item['name']} — {fmt_price(item['price'])}"
+        for item in cart
+    )
 
     order_text = (
         "📦 НОВЕ ЗАМОВЛЕННЯ\n\n"
+        f"🆔 Order ID: {order_id}\n"
         f"👤 Клієнт: {get_username(user)}\n"
         f"ID: {user.id}\n"
         f"📍 Місто: {city}\n\n"
-        "🛒 Товари:\n" +
-        "\n".join(f"• {i['name']} — {fmt_price(i['price'])}" for i in cart) +
-        f"\n\n💰 Разом: {fmt_price(cart_total(cart))}\n"
+        f"🛒 Товари:\n{items_text}\n\n"
+        f"💰 Разом: {fmt_price(cart_total(cart))}\n"
         f"🕒 {timestamp}"
     )
 
+    # тільки адміни
     for admin_id in ADMIN_IDS:
-        try:
-            await context.bot.send_message(chat_id=admin_id, text=order_text)
-        except Exception as e:
-            logging.exception("Failed to send order to admin %s: %s", admin_id, e)
+        await send_message_safely(context, admin_id, order_text)
 
-    courier_chat_id = get_courier_chat_id(city)
-    if courier_chat_id:
-        try:
-            await context.bot.send_message(chat_id=courier_chat_id, text=order_text)
-        except Exception as e:
-            logging.exception("Failed to send order to courier %s: %s", courier_chat_id, e)
-
-    courier = get_courier_for_city(city)
-    context.user_data.pop("cart", None)
-
-    await smart_edit_or_reply(
-        q,
-        "✅ Дякуємо за замовлення!\n\n"
-        "Курʼєр звʼяжеться з вами:\n"
-        f"{courier}",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
-            [InlineKeyboardButton("⬅ На головну", callback_data="start")],
-        ])
+    # тільки курʼєр конкретного міста
+    await send_message_safely(
+        context,
+        city_cfg["courier_chat_id"],
+        order_text,
     )
 
+    save_order({
+        "order_id": order_id,
+        "user_id": user.id,
+        "username": user.username,
+        "city": city,
+        "items": cart,
+        "total": cart_total(cart),
+        "created_at": timestamp,
+        "courier_chat_id": city_cfg["courier_chat_id"],
+        "courier_username": city_cfg["courier_username"],
+    })
 
-# ================== ADMIN (як було) ==================
-async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cart"] = []
+
+    await send_clean_text(
+        update,
+        context,
+        "✅ Дякуємо за замовлення!\n\n"
+        "Курʼєр звʼяжеться з вами:\n"
+        f"{city_cfg['courier_username']}",
+        InlineKeyboardMarkup([
+            [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
+            [InlineKeyboardButton("⬅ На головну", callback_data="main")],
+        ]),
+    )
+
+# ================== ADMIN ==================
+
+
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_admin(update.effective_user.id):
         return
 
     keyboard = []
-    for cat_key, cat in CATALOG["categories"].items():
-        keyboard.append([InlineKeyboardButton(f"⚙️ {cat.get('title', cat_key)}", callback_data=f"admin_cat:{cat_key}")])
 
-    await update.message.reply_text("🛠 Адмін-панель (наявність):", reply_markup=InlineKeyboardMarkup(keyboard))
+    for cat_key, cat in CATALOG.get("categories", {}).items():
+        keyboard.append([
+            InlineKeyboardButton(
+                f"⚙️ {cat.get('title', cat_key)}",
+                callback_data=f"admin_cat:{cat_key}",
+            )
+        ])
+
+    await send_clean_text(
+        update,
+        context,
+        "🛠 Адмін-панель\nКерування наявністю:",
+        InlineKeyboardMarkup(keyboard),
+    )
 
 
-async def admin_cat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_cat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
     if not is_admin(q.from_user.id):
         return
+
+    await clean_callback_message(update, context)
 
     cat_key = q.data.split(":", 1)[1]
-    cat = CATALOG["categories"].get(cat_key)
+    cat = CATALOG.get("categories", {}).get(cat_key)
+
     if not cat:
-        await smart_edit_or_reply(q, "Категорія не знайдена.")
+        await send_clean_text(update, context, "❌ Категорію не знайдено.")
         return
+
+    keyboard = []
 
     if "brands" in cat:
-        kb = []
         for brand_key, brand in cat["brands"].items():
-            kb.append([InlineKeyboardButton(brand.get("title", brand_key), callback_data=f"admin_brand:{cat_key}:{brand_key}")])
-        kb.append([InlineKeyboardButton("⬅ Назад", callback_data="admin_back")])
-        await smart_edit_or_reply(q, "Оберіть бренд:", reply_markup=InlineKeyboardMarkup(kb))
+            keyboard.append([
+                InlineKeyboardButton(
+                    brand.get("title", brand_key),
+                    callback_data=f"admin_brand:{cat_key}:{brand_key}",
+                )
+            ])
+
+        keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="admin_home")])
+
+        await send_clean_text(
+            update,
+            context,
+            f"⚙️ {cat.get('title', cat_key)}\nОберіть бренд:",
+            InlineKeyboardMarkup(keyboard),
+        )
         return
 
-    kb = []
-    lines = []
-    for idx, it in enumerate(cat.get("items", [])):
-        key = item_key("cat", cat_key, str(idx))
-        st = stock_get(key)
-        mark = "✅" if st.get("in_stock", True) else "❌"
-        eta = st.get("eta")
-        eta_txt = f" (з {eta})" if (not st.get("in_stock", True) and eta) else ""
-        lines.append(f"{idx+1}. {mark} {it['name']}{eta_txt}")
-        kb.append([InlineKeyboardButton(f"{mark} {it['name']}", callback_data=f"admin_toggle:{key}")])
+    for idx, item in enumerate(cat.get("items", [])):
+        key = item_key("cat", cat_key, idx)
+        keyboard.append([admin_item_button(key)])
 
-    kb.append([InlineKeyboardButton("⬅ Назад", callback_data="admin_back")])
-    await smart_edit_or_reply(q, "Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
+    keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data="admin_home")])
+
+    await send_clean_text(
+        update,
+        context,
+        f"⚙️ {cat.get('title', cat_key)}\nОберіть товар:",
+        InlineKeyboardMarkup(keyboard),
+    )
 
 
-async def admin_brand(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def admin_item_button(key: str) -> InlineKeyboardButton:
+    item = resolve_item(key)
+    st = stock_get(key)
+
+    name = item["name"] if item else key
+    mark = "✅" if st.get("in_stock", True) else "❌"
+    eta = st.get("eta")
+
+    label = f"{mark} {name}"
+    if not st.get("in_stock", True) and eta:
+        label += f" з {eta}"
+
+    if len(label) > 60:
+        label = label[:57] + "..."
+
+    return InlineKeyboardButton(label, callback_data=f"admin_toggle:{key}")
+
+
+async def admin_brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
     if not is_admin(q.from_user.id):
         return
+
+    await clean_callback_message(update, context)
 
     _, cat_key, brand_key = q.data.split(":", 2)
-    brand = CATALOG["categories"][cat_key]["brands"].get(brand_key)
-    if not brand:
-        await smart_edit_or_reply(q, "Бренд не знайдено.")
+
+    try:
+        brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+    except Exception:
+        await send_clean_text(update, context, "❌ Бренд не знайдено.")
         return
 
+    keyboard = []
     items = brand.get("items", [])
-    if not items:
-        await smart_edit_or_reply(q, "Немає позицій у бренді.")
-        return
 
-    first = items[0]
-    if isinstance(first, dict) and "nicotine" in first and "items" in first:
-        kb = []
-        for bidx, block in enumerate(items):
-            kb.append([InlineKeyboardButton(
-                f"{block.get('nicotine')} — {fmt_price(block.get('price'))}",
-                callback_data=f"admin_block:{cat_key}:{brand_key}:{bidx}"
-            )])
-        kb.append([InlineKeyboardButton("⬅ Назад", callback_data=f"admin_cat:{cat_key}")])
-        await smart_edit_or_reply(q, "Оберіть блок:", reply_markup=InlineKeyboardMarkup(kb))
-        return
+    if items:
+        first = items[0]
 
-    kb = []
-    lines = []
-    for idx, it in enumerate(items):
-        if not isinstance(it, dict) or "name" not in it:
-            continue
+        if isinstance(first, dict) and "nicotine" in first:
+            for idx, block in enumerate(items):
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{block.get('nicotine')} — {fmt_price(block.get('price'))}",
+                        callback_data=f"admin_nic:{cat_key}:{brand_key}:{idx}",
+                    )
+                ])
 
-        key = item_key("brand", cat_key, brand_key, str(idx))
-        st = stock_get(key)
-        mark = "✅" if st.get("in_stock", True) else "❌"
-        eta = st.get("eta")
-        eta_txt = f" (з {eta})" if (not st.get("in_stock", True) and eta) else ""
-        lines.append(f"{idx+1}. {mark} {it['name']}{eta_txt}")
-        kb.append([InlineKeyboardButton(f"{mark} {it['name']}", callback_data=f"admin_toggle:{key}")])
+        elif isinstance(first, dict) and "name" in first:
+            for idx, item in enumerate(items):
+                if isinstance(item.get("items"), list) and item.get("items"):
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"🍓 {item['name']}",
+                            callback_data=f"admin_flavors:{cat_key}:{brand_key}:{idx}",
+                        )
+                    ])
+                else:
+                    key = item_key("brand", cat_key, brand_key, idx)
+                    keyboard.append([admin_item_button(key)])
 
-    kb.append([InlineKeyboardButton("⬅ Назад", callback_data=f"admin_cat:{cat_key}")])
-    await smart_edit_or_reply(q, "Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
+    keyboard.append([InlineKeyboardButton("⬅ Назад", callback_data=f"admin_cat:{cat_key}")])
+
+    await send_clean_text(
+        update,
+        context,
+        f"⚙️ {brand.get('title', brand_key)}\nОберіть позицію:",
+        InlineKeyboardMarkup(keyboard),
+    )
 
 
-async def admin_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_nic_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
     if not is_admin(q.from_user.id):
         return
+
+    await clean_callback_message(update, context)
 
     _, cat_key, brand_key, block_idx = q.data.split(":", 3)
-    brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-    block = brand["items"][int(block_idx)]
 
-    kb = []
-    lines = []
-    for fidx, flavor in enumerate(block.get("items", [])):
-        key = item_key("nic", cat_key, brand_key, str(block_idx), str(fidx))
-        st = stock_get(key)
-        mark = "✅" if st.get("in_stock", True) else "❌"
-        eta = st.get("eta")
-        eta_txt = f" (з {eta})" if (not st.get("in_stock", True) and eta) else ""
-        lines.append(f"{fidx+1}. {mark} {flavor}{eta_txt}")
-        kb.append([InlineKeyboardButton(f"{mark} {flavor}", callback_data=f"admin_toggle:{key}")])
+    try:
+        brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+        block = brand["items"][int(block_idx)]
+    except Exception:
+        await send_clean_text(update, context, "❌ Блок не знайдено.")
+        return
 
-    kb.append([InlineKeyboardButton("⬅ Назад", callback_data=f"admin_brand:{cat_key}:{brand_key}")])
-    await smart_edit_or_reply(q, "Керування наявністю:\n\n" + "\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
+    keyboard = []
+
+    for idx, _ in enumerate(block.get("items", [])):
+        key = item_key("nic", cat_key, brand_key, block_idx, idx)
+        keyboard.append([admin_item_button(key)])
+
+    keyboard.append([
+        InlineKeyboardButton("⬅ Назад", callback_data=f"admin_brand:{cat_key}:{brand_key}")
+    ])
+
+    await send_clean_text(
+        update,
+        context,
+        f"⚙️ {brand.get('title', brand_key)} {block.get('nicotine', '')}\nОберіть смак:",
+        InlineKeyboardMarkup(keyboard),
+    )
 
 
-async def admin_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_flavors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
     if not is_admin(q.from_user.id):
         return
 
+    await clean_callback_message(update, context)
+
+    _, cat_key, brand_key, parent_idx = q.data.split(":", 3)
+
+    try:
+        brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+        parent = brand["items"][int(parent_idx)]
+        flavors = parent.get("items", [])
+    except Exception:
+        await send_clean_text(update, context, "❌ Смаки не знайдено.")
+        return
+
+    keyboard = []
+
+    for idx, _ in enumerate(flavors):
+        key = item_key("flv", cat_key, brand_key, parent_idx, idx)
+        keyboard.append([admin_item_button(key)])
+
+    keyboard.append([
+        InlineKeyboardButton("⬅ Назад", callback_data=f"admin_brand:{cat_key}:{brand_key}")
+    ])
+
+    await send_clean_text(
+        update,
+        context,
+        f"⚙️ {parent.get('name', 'Товар')}\nОберіть смак:",
+        InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def admin_toggle_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    q = update.callback_query
+    await q.answer()
+
+    if not is_admin(q.from_user.id):
+        return
+
+    await clean_callback_message(update, context)
+
     key = q.data.split(":", 1)[1]
+    item = resolve_item(key)
+
+    if not item:
+        await send_clean_text(update, context, "❌ Товар не знайдено.")
+        return
+
     st = stock_get(key)
 
     if st.get("in_stock", True):
         context.user_data["awaiting_eta_key"] = key
-        title, price = resolve_item_by_key(key)
-        extra = f" — {fmt_price(price)}" if price is not None else ""
-        await smart_edit_or_reply(
-            q,
-            f"❌ Ставимо 'нема в наявності'\n"
-            f"Товар: {title}{extra}\n\n"
-            "Вкажи дату надходження у форматі YYYY-MM-DD (наприклад 2026-01-20):"
+
+        await send_clean_text(
+            update,
+            context,
+            "❌ Ставимо товар як «нема в наявності»\n\n"
+            f"🧾 {item['name']}\n"
+            f"💶 {fmt_price(item['price'])}\n\n"
+            "Вкажіть дату надходження у форматі YYYY-MM-DD:",
         )
-    else:
-        stock_set(key, in_stock=True, eta=None)
-        save_stock_cache()
-        title, price = resolve_item_by_key(key)
-        extra = f" — {fmt_price(price)}" if price is not None else ""
-        await smart_edit_or_reply(q, f"✅ Тепер 'в наявності'\nТовар: {title}{extra}")
+        return
+
+    stock_set(key, in_stock=True, eta=None)
+    await save_stock()
+
+    await send_clean_text(
+        update,
+        context,
+        "✅ Тепер товар в наявності:\n\n"
+        f"🧾 {item['name']}\n"
+        f"💶 {fmt_price(item['price'])}",
+    )
 
 
-async def admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_home_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
 
     if not is_admin(q.from_user.id):
         return
 
+    await clean_callback_message(update, context)
+
     keyboard = []
-    for cat_key, cat in CATALOG["categories"].items():
-        keyboard.append([InlineKeyboardButton(f"⚙️ {cat.get('title', cat_key)}", callback_data=f"admin_cat:{cat_key}")])
 
-    await smart_edit_or_reply(q, "🛠 Адмін-панель (наявність):", reply_markup=InlineKeyboardMarkup(keyboard))
+    for cat_key, cat in CATALOG.get("categories", {}).items():
+        keyboard.append([
+            InlineKeyboardButton(
+                f"⚙️ {cat.get('title', cat_key)}",
+                callback_data=f"admin_cat:{cat_key}",
+            )
+        ])
+
+    await send_clean_text(
+        update,
+        context,
+        "🛠 Адмін-панель\nКерування наявністю:",
+        InlineKeyboardMarkup(keyboard),
+    )
+
+# ================== ERROR ==================
 
 
-# ================== ERROR HANDLER ==================
-async def error_handler(update, context):
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.error("Exception in handler", exc_info=context.error)
 
-
 # ================== MAIN ==================
-def main():
-    load_stock_cache()
+
+
+def main() -> None:
+    load_stock()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Start / city
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(city_callback_handler, pattern="^city:"))
+    app.add_handler(CommandHandler("admin", admin_cmd))
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
-    # Main menu & catalog
-    app.add_handler(CallbackQueryHandler(show_main_menu_handler, pattern="^start$"))
-    app.add_handler(CallbackQueryHandler(catalog_menu, pattern="^catalog$"))
-    app.add_handler(CallbackQueryHandler(category_handler, pattern="^category:"))
+    app.add_handler(CallbackQueryHandler(city_handler, pattern=r"^city:"))
+    app.add_handler(CallbackQueryHandler(main_menu_handler, pattern=r"^main$"))
 
-    # Brands, nicotine, flavors and adding
-    app.add_handler(CallbackQueryHandler(brand_handler, pattern="^brand:"))
-    app.add_handler(CallbackQueryHandler(nicotine_handler, pattern="^nic:"))
-    app.add_handler(CallbackQueryHandler(flavors_handler, pattern="^flavors:"))  # <-- NEW
-    app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern="^(add:|addb:|addn:|addf:)"))  # <-- addf
+    app.add_handler(CallbackQueryHandler(catalog_menu, pattern=r"^catalog$"))
+    app.add_handler(CallbackQueryHandler(category_handler, pattern=r"^category:"))
+    app.add_handler(CallbackQueryHandler(brand_handler, pattern=r"^brand:"))
+    app.add_handler(CallbackQueryHandler(nicotine_handler, pattern=r"^nic:"))
+    app.add_handler(CallbackQueryHandler(flavors_handler, pattern=r"^flavors:"))
 
-    # Reserve
-    app.add_handler(CallbackQueryHandler(reserve_handler, pattern="^reserve:"))
+    app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern=r"^add:"))
+    app.add_handler(CallbackQueryHandler(reserve_handler, pattern=r"^reserve:"))
 
-    # Cart / remove one / checkout
-    app.add_handler(CallbackQueryHandler(cart_view_handler, pattern="^cart$"))
-    app.add_handler(CallbackQueryHandler(remove_one_handler, pattern="^remove_one$"))
-    app.add_handler(CallbackQueryHandler(checkout_handler, pattern="^checkout$"))
+    app.add_handler(CallbackQueryHandler(cart_handler, pattern=r"^cart$"))
+    app.add_handler(CallbackQueryHandler(remove_last_handler, pattern=r"^remove_last$"))
+    app.add_handler(CallbackQueryHandler(clear_cart_handler, pattern=r"^clear_cart$"))
+    app.add_handler(CallbackQueryHandler(checkout_handler, pattern=r"^checkout$"))
 
-    # Admin
-    app.add_handler(CommandHandler("admin", admin_cmd))
-    app.add_handler(CallbackQueryHandler(admin_cat, pattern="^admin_cat:"))
-    app.add_handler(CallbackQueryHandler(admin_brand, pattern="^admin_brand:"))
-    app.add_handler(CallbackQueryHandler(admin_block, pattern="^admin_block:"))
-    app.add_handler(CallbackQueryHandler(admin_toggle, pattern="^admin_toggle:"))
-    app.add_handler(CallbackQueryHandler(admin_back, pattern="^admin_back$"))
+    app.add_handler(CallbackQueryHandler(admin_home_handler, pattern=r"^admin_home$"))
+    app.add_handler(CallbackQueryHandler(admin_cat_handler, pattern=r"^admin_cat:"))
+    app.add_handler(CallbackQueryHandler(admin_brand_handler, pattern=r"^admin_brand:"))
+    app.add_handler(CallbackQueryHandler(admin_nic_handler, pattern=r"^admin_nic:"))
+    app.add_handler(CallbackQueryHandler(admin_flavors_handler, pattern=r"^admin_flavors:"))
+    app.add_handler(CallbackQueryHandler(admin_toggle_handler, pattern=r"^admin_toggle:"))
 
     app.add_error_handler(error_handler)
 
-    logging.info("Bot starting...")
+    logging.info("Bot started")
     app.run_polling(close_loop=False)
 
 
