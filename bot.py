@@ -96,6 +96,18 @@ CITY_CONFIG: Dict[str, Dict[str, Any]] = {
 # =========================================================
 
 
+def write_json(path: Path, data: Any) -> None:
+    try:
+        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+        tmp_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp_path.replace(path)
+    except Exception as e:
+        logger.exception("Failed writing %s: %s", path, e)
+
+
 def ensure_runtime_files() -> None:
     if not STOCK_PATH.exists():
         write_json(STOCK_PATH, {})
@@ -111,18 +123,6 @@ def read_json(path: Path, default: Any) -> Any:
     except Exception as e:
         logger.exception("Failed reading %s: %s", path, e)
         return default
-
-
-def write_json(path: Path, data: Any) -> None:
-    try:
-        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-        tmp_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        tmp_path.replace(path)
-    except Exception as e:
-        logger.exception("Failed writing %s: %s", path, e)
 
 
 ensure_runtime_files()
@@ -253,6 +253,17 @@ def parse_idx(value: str) -> Optional[int]:
 def has_city(context: ContextTypes.DEFAULT_TYPE) -> bool:
     return bool(context.user_data.get("city_key"))
 
+
+def get_active_menu_id(context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
+    return context.user_data.get("active_menu_message_id")
+
+
+def set_active_menu_id(
+    context: ContextTypes.DEFAULT_TYPE,
+    message_id: Optional[int],
+) -> None:
+    context.user_data["active_menu_message_id"] = message_id
+
 # =========================================================
 # UI HELPERS
 # =========================================================
@@ -266,13 +277,37 @@ async def answer_callback(update: Update) -> None:
             pass
 
 
+async def delete_message_safe(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    message_id: Optional[int],
+) -> None:
+    if not message_id:
+        return
+
+    try:
+        await context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=message_id,
+        )
+    except BadRequest as e:
+        text = str(e).lower()
+        if "message to delete not found" in text:
+            return
+        if "message can't be deleted" in text:
+            return
+        logger.exception("Delete message failed: %s", e)
+    except Exception as e:
+        logger.exception("Delete message failed: %s", e)
+
+
 async def show_stale_callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     text: str = "⚠️ Це меню застаріло або вже недійсне. Я відкрив актуальне меню.",
 ) -> None:
     if has_city(context):
-        await show_text(update, text, kb_main())
+        await show_text(update, text, kb_main(), context=context)
         return
 
     await start(update, context)
@@ -301,6 +336,8 @@ async def show_text(
     update: Update,
     text: str,
     reply_markup: Optional[InlineKeyboardMarkup] = None,
+    context: Optional[ContextTypes.DEFAULT_TYPE] = None,
+    cleanup_user: bool = False,
 ) -> None:
     if update.callback_query:
         q = update.callback_query
@@ -316,6 +353,9 @@ async def show_text(
                     text=text,
                     reply_markup=reply_markup,
                 )
+
+            if context and q.message:
+                set_active_menu_id(context, q.message.message_id)
             return
 
         except BadRequest as e:
@@ -324,11 +364,43 @@ async def show_text(
         except Exception:
             logger.exception("show_text edit failed")
 
-        await q.message.reply_text(text=text, reply_markup=reply_markup)
+        if not q.message:
+            return
+
+        sent = await q.message.reply_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
+
+        if context:
+            previous_id = get_active_menu_id(context)
+            set_active_menu_id(context, sent.message_id)
+
+            if previous_id and previous_id != sent.message_id:
+                await delete_message_safe(context, sent.chat_id, previous_id)
+
         return
 
     if update.message:
-        await update.message.reply_text(text=text, reply_markup=reply_markup)
+        previous_id = get_active_menu_id(context) if context else None
+
+        sent = await update.message.reply_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
+
+        if context:
+            set_active_menu_id(context, sent.message_id)
+
+            if previous_id and previous_id != sent.message_id:
+                await delete_message_safe(context, sent.chat_id, previous_id)
+
+            if cleanup_user:
+                await delete_message_safe(
+                    context,
+                    update.effective_chat.id,
+                    update.message.message_id,
+                )
 
 
 async def show_photo(
@@ -337,11 +409,18 @@ async def show_photo(
     photo: str,
     caption: str,
     reply_markup: Optional[InlineKeyboardMarkup] = None,
+    cleanup_user: bool = False,
 ) -> None:
     source_type, source = resolve_photo_source(photo)
 
     if source_type is None:
-        await show_text(update, caption, reply_markup)
+        await show_text(
+            update,
+            caption,
+            reply_markup,
+            context=context,
+            cleanup_user=cleanup_user,
+        )
         return
 
     try:
@@ -351,6 +430,7 @@ async def show_photo(
                     media=InputMediaPhoto(media=source, caption=caption),
                     reply_markup=reply_markup,
                 )
+                set_active_menu_id(context, update.callback_query.message.message_id)
                 return
 
             if source_type == "local":
@@ -362,7 +442,8 @@ async def show_photo(
                         ),
                         reply_markup=reply_markup,
                     )
-                    return
+                set_active_menu_id(context, update.callback_query.message.message_id)
+                return
 
     except BadRequest as e:
         if "message is not modified" in str(e).lower():
@@ -371,29 +452,47 @@ async def show_photo(
         logger.exception("Photo send failed: %s", e)
 
     try:
+        previous_id = get_active_menu_id(context)
+
         if source_type == "remote":
-            await context.bot.send_photo(
+            sent = await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
                 photo=source,
                 caption=caption,
                 reply_markup=reply_markup,
             )
-            return
-
-        if source_type == "local":
+        else:
             with open(source, "rb") as f:
-                await context.bot.send_photo(
+                sent = await context.bot.send_photo(
                     chat_id=update.effective_chat.id,
                     photo=InputFile(f, filename=source.name),
                     caption=caption,
                     reply_markup=reply_markup,
                 )
-            return
+
+        set_active_menu_id(context, sent.message_id)
+
+        if previous_id and previous_id != sent.message_id:
+            await delete_message_safe(context, sent.chat_id, previous_id)
+
+        if cleanup_user and update.message:
+            await delete_message_safe(
+                context,
+                update.effective_chat.id,
+                update.message.message_id,
+            )
+        return
 
     except Exception as e:
         logger.exception("Photo send fallback failed: %s", e)
 
-    await show_text(update, caption, reply_markup)
+    await show_text(
+        update,
+        caption,
+        reply_markup,
+        context=context,
+        cleanup_user=cleanup_user,
+    )
 
 
 async def send_message_safe(
@@ -573,6 +672,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         update,
         "👋 Вітаємо у ELF FOX\n\n📍 Оберіть ваше місто:",
         keyboard,
+        context=context,
     )
 
 
@@ -589,7 +689,7 @@ async def city_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if city_key == "Other":
         context.user_data["awaiting_city"] = True
-        await show_text(update, "✍️ Напишіть назву вашого міста:")
+        await show_text(update, "✍️ Напишіть назву вашого міста:", context=context)
         return
 
     await show_main(update, context)
@@ -602,6 +702,7 @@ async def show_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         update,
         f"🦊 ELF FOX\n\n📍 Ваше місто: {city}\n\nОберіть дію:",
         kb_main(),
+        context=context,
     )
 
 
@@ -620,7 +721,13 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if context.user_data.get("awaiting_city"):
         context.user_data["custom_city"] = text
         context.user_data["awaiting_city"] = False
+
         await show_main(update, context)
+        await delete_message_safe(
+            context,
+            update.effective_chat.id,
+            update.message.message_id,
+        )
         return
 
     if context.user_data.get("reserve_key"):
@@ -646,27 +753,41 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         delivered, _ = await notify_targets(context, ADMIN_IDS, reservation_text)
 
         if not delivered:
-            await update.message.reply_text(
+            await show_text(
+                update,
                 "❌ Не вдалося передати бронювання. Спробуйте ще раз трохи пізніше.",
-                reply_markup=kb_main(),
+                kb_main(),
+                context=context,
+                cleanup_user=True,
             )
             return
 
         context.user_data.pop("reserve_key", None)
 
-        await update.message.reply_text(
+        await show_text(
+            update,
             "✅ Бронювання передано адміну",
-            reply_markup=kb_main(),
+            kb_main(),
+            context=context,
+            cleanup_user=True,
         )
         return
 
     if not has_city(context):
         await start(update, context)
+        await delete_message_safe(
+            context,
+            update.effective_chat.id,
+            update.message.message_id,
+        )
         return
 
-    await update.message.reply_text(
+    await show_text(
+        update,
         "Я не очікував текст у цей момент. Скористайся кнопками нижче.",
-        reply_markup=kb_main(),
+        kb_main(),
+        context=context,
+        cleanup_user=True,
     )
 
 # =========================================================
@@ -679,7 +800,7 @@ async def catalog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     categories = categories_get()
     if not categories:
-        await show_text(update, "❌ Каталог тимчасово недоступний", kb_main())
+        await show_text(update, "❌ Каталог тимчасово недоступний", kb_main(), context=context)
         return
 
     keyboard = []
@@ -697,6 +818,7 @@ async def catalog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         update,
         "🛍 Каталог\n\nОберіть категорію:",
         InlineKeyboardMarkup(keyboard),
+        context=context,
     )
 
 
@@ -726,7 +848,7 @@ async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     brands = cat.get("brands", {})
     if not isinstance(brands, dict):
-        await show_text(update, "❌ У категорії немає брендів", kb_main())
+        await show_text(update, "❌ У категорії немає брендів", kb_main(), context=context)
         return
 
     keyboard = []
@@ -981,7 +1103,7 @@ async def add_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     item = resolve_item(key)
 
     if not item:
-        await show_text(update, "❌ Товар не знайдено")
+        await show_text(update, "❌ Товар не знайдено", context=context)
         return
 
     st = stock_get(key)
@@ -990,6 +1112,7 @@ async def add_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             update,
             "❌ Цього товару вже немає в наявності",
             kb_main(),
+            context=context,
         )
         return
 
@@ -1023,7 +1146,7 @@ async def reserve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     item = resolve_item(key)
 
     if not item:
-        await show_text(update, "❌ Товар не знайдено")
+        await show_text(update, "❌ Товар не знайдено", context=context)
         return
 
     st = stock_get(key)
@@ -1036,6 +1159,7 @@ async def reserve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"💶 {fmt_price(item['price'])}\n"
         f"🗓 Очікується: {st.get('eta') or 'дату уточнюйте'}\n\n"
         "✍️ Напишіть контакт або коментар:",
+        context=context,
     )
 
 # =========================================================
@@ -1056,6 +1180,7 @@ async def cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
                 [InlineKeyboardButton("⬅ На головну", callback_data="main")],
             ]),
+            context=context,
         )
         return
 
@@ -1078,7 +1203,7 @@ async def cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         [InlineKeyboardButton("⬅ На головну", callback_data="main")],
     ])
 
-    await show_text(update, text, keyboard)
+    await show_text(update, text, keyboard, context=context)
 
 
 async def remove_last_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1096,7 +1221,12 @@ async def clear_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data["cart"] = []
 
-    await show_text(update, "🗑 Кошик очищено", kb_main())
+    await show_text(
+        update,
+        "🗑 Кошик очищено",
+        kb_main(),
+        context=context,
+    )
 
 # =========================================================
 # CHECKOUT
@@ -1110,6 +1240,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await show_text(
             update,
             "⏳ Замовлення вже обробляється. Зачекай кілька секунд.",
+            context=context,
         )
         return
 
@@ -1120,7 +1251,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         cart = cart_get(context)
 
         if not cart:
-            await show_text(update, "🛒 Кошик порожній")
+            await show_text(update, "🛒 Кошик порожній", context=context)
             return
 
         unavailable = []
@@ -1136,6 +1267,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 "❌ Деякі товари вже не в наявності:\n\n"
                 + "\n".join(f"• {x}" for x in unavailable),
                 kb_main(),
+                context=context,
             )
             return
 
@@ -1180,6 +1312,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     [InlineKeyboardButton("🛒 Кошик", callback_data="cart")],
                     [InlineKeyboardButton("⬅ На головну", callback_data="main")],
                 ]),
+                context=context,
             )
             return
 
@@ -1216,18 +1349,19 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
                 [InlineKeyboardButton("⬅ На головну", callback_data="main")],
             ]),
+            context=context,
         )
     finally:
         context.user_data.pop("checkout_in_progress", None)
+
+# =========================================================
+# FALLBACKS / ERRORS
+# =========================================================
 
 
 async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await answer_callback(update)
     await show_stale_callback(update, context)
-
-# =========================================================
-# ERROR HANDLER
-# =========================================================
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
