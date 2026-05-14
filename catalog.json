@@ -131,8 +131,9 @@
         "vaporesso_xros": {
           "title": "Vaporesso XROS",
           "photo": "photos/Vaporesso.jpg",
-          "price_range": "36-52 EUR",
+          "price_range": "20-52 EUR",
           "items": [
+            { "name": "Vaporesso XROS 3 Mini", "price": 20 },
             { "name": "Vaporesso XROS 4 Mini", "price": 36 },
             { "name": "Vaporesso XROS 4", "price": 42 },
             { "name": "Vaporesso XROS 4 Nano", "price": 45 },
@@ -160,27 +161,24 @@
         "xros": {
           "title": "Vaporesso XROS",
           "photo": "photos/car1.png.jpg",
-          "price_range": "8-14 EUR",
+          "price_range": "8 EUR",
           "items": [
             { "name": "Картридж 0.4Ω", "price": 8 },
             { "name": "Картридж 0.6Ω", "price": 8 },
             { "name": "Картридж 0.8Ω", "price": 8 },
             { "name": "Картридж 1.0Ω", "price": 8 },
             { "name": "Картридж 1.2Ω", "price": 9 },
-            { "name": "XROS Corex 2.0 0.6Ω (2 pcs)", "price": 14 },
-            { "name": "XROS Corex 2.0 0.8Ω (2 pcs)", "price": 14 }
           ]
         },
         "elfbar_pro": {
           "title": "Elf Bar Pro",
           "photo": "photos/car2.png.jpg",
-          "price_range": "8-10 EUR",
+          "price_range": "8 EUR",
           "items": [
             { "name": "Картридж 0.4Ω", "price": 8 },
             { "name": "Картридж 0.6Ω", "price": 8 },
             { "name": "Картридж 0.8Ω", "price": 8 },
             { "name": "Картридж 1.0Ω", "price": 8 },
-            { "name": "Картридж Mesh Edition", "price": 10 }
           ]
         }
       }
