@@ -3,13 +3,14 @@ import json
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputFile,
+    InputMediaPhoto,
 )
 from telegram.error import BadRequest
 from telegram.ext import (
@@ -217,6 +218,45 @@ def extract_flavor_name(flavor):
 
     return str(flavor)
 
+
+def categories_get() -> Dict[str, Any]:
+    categories = CATALOG.get("categories", {})
+    return categories if isinstance(categories, dict) else {}
+
+
+def category_get(cat_key: str) -> Optional[Dict[str, Any]]:
+    return categories_get().get(cat_key)
+
+
+def brand_get(cat_key: str, brand_key: str) -> Optional[Dict[str, Any]]:
+    category = category_get(cat_key)
+
+    if not category:
+        return None
+
+    brands = category.get("brands", {})
+
+    if not isinstance(brands, dict):
+        return None
+
+    return brands.get(brand_key)
+
+
+def items_get(container: Dict[str, Any]) -> List[Any]:
+    items = container.get("items", [])
+    return items if isinstance(items, list) else []
+
+
+def parse_idx(value: str) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def has_city(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return bool(context.user_data.get("city_key"))
+
 # =========================================================
 # UI HELPERS
 # =========================================================
@@ -230,6 +270,32 @@ async def answer_callback(update: Update):
             pass
 
 
+async def show_stale_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str = "⚠️ Це меню застаріло або вже недійсне. Я відкрив актуальне меню.",
+):
+    if has_city(context):
+        await show_text(update, text, kb_main())
+        return
+
+    await start(update, context)
+
+
+def resolve_photo_source(photo: str):
+    if not photo:
+        return None
+
+    if photo.startswith("http://") or photo.startswith("https://"):
+        return photo
+
+    path = (BASE_DIR / photo).resolve()
+    if path.exists():
+        return InputFile(path)
+
+    return None
+
+
 async def show_text(
     update: Update,
     text: str,
@@ -239,14 +305,23 @@ async def show_text(
         q = update.callback_query
 
         try:
-            await q.edit_message_text(
-                text=text,
-                reply_markup=reply_markup,
-            )
+            if q.message and q.message.photo:
+                await q.edit_message_caption(
+                    caption=text,
+                    reply_markup=reply_markup,
+                )
+            else:
+                await q.edit_message_text(
+                    text=text,
+                    reply_markup=reply_markup,
+                )
             return
 
-        except BadRequest:
-            pass
+        except BadRequest as e:
+            if "message is not modified" in str(e).lower():
+                return
+        except Exception:
+            logging.exception("show_text edit failed")
 
         await q.message.reply_text(
             text=text,
@@ -268,31 +343,37 @@ async def show_photo(
     caption: str,
     reply_markup=None,
 ):
-    try:
-        chat_id = update.effective_chat.id
+    source = resolve_photo_source(photo)
 
-        if photo.startswith("http://") or photo.startswith("https://"):
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=photo,
-                caption=caption,
+    if source is None:
+        await show_text(update, caption, reply_markup)
+        return
+
+    try:
+        if update.callback_query and update.callback_query.message:
+            await update.callback_query.edit_message_media(
+                media=InputMediaPhoto(media=source, caption=caption),
                 reply_markup=reply_markup,
             )
             return
 
-        path = (BASE_DIR / photo).resolve()
-
-        if path.exists():
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=InputFile(path),
-                caption=caption,
-                reply_markup=reply_markup,
-            )
+    except BadRequest as e:
+        if "message is not modified" in str(e).lower():
             return
 
     except Exception as e:
         logging.exception("Photo send failed: %s", e)
+
+    try:
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=source,
+            caption=caption,
+            reply_markup=reply_markup,
+        )
+        return
+    except Exception as e:
+        logging.exception("Photo send fallback failed: %s", e)
 
     await show_text(update, caption, reply_markup)
 
@@ -301,15 +382,34 @@ async def send_message_safe(
     context: ContextTypes.DEFAULT_TYPE,
     chat_id: int,
     text: str,
-):
+) -> bool:
     try:
         await context.bot.send_message(
             chat_id=chat_id,
             text=text,
         )
+        return True
 
     except Exception as e:
         logging.exception("Failed sending message: %s", e)
+        return False
+
+
+async def notify_targets(
+    context: ContextTypes.DEFAULT_TYPE,
+    recipients: List[int],
+    text: str,
+) -> Tuple[List[int], List[int]]:
+    delivered = []
+    failed = []
+
+    for chat_id in recipients:
+        if await send_message_safe(context, chat_id, text):
+            delivered.append(chat_id)
+        else:
+            failed.append(chat_id)
+
+    return delivered, failed
 
 # =========================================================
 # KEYBOARDS
@@ -341,41 +441,100 @@ def resolve_item(key: str):
         kind = parts[0]
 
         if kind == "brand":
+            if len(parts) != 4:
+                return None
+
             _, cat_key, brand_key, idx = parts
 
-            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-            item = brand["items"][int(idx)]
+            brand = brand_get(cat_key, brand_key)
+            item_idx = parse_idx(idx)
+
+            if not brand or item_idx is None:
+                return None
+
+            items = items_get(brand)
+
+            if item_idx < 0 or item_idx >= len(items):
+                return None
+
+            item = items[item_idx]
+
+            if not isinstance(item, dict):
+                return None
 
             return {
                 "key": key,
                 "name": item["name"],
                 "price": float(item["price"]),
-                "photo": brand.get("photo"),
+                "photo": item.get("photo") or brand.get("photo"),
             }
 
         if kind == "nic":
+            if len(parts) != 5:
+                return None
+
             _, cat_key, brand_key, block_idx, flavor_idx = parts
 
-            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-            block = brand["items"][int(block_idx)]
+            brand = brand_get(cat_key, brand_key)
+            block_index = parse_idx(block_idx)
+            flavor_index = parse_idx(flavor_idx)
 
-            flavor = block["items"][int(flavor_idx)]
+            if not brand or block_index is None or flavor_index is None:
+                return None
+
+            brand_items = items_get(brand)
+
+            if block_index < 0 or block_index >= len(brand_items):
+                return None
+
+            block = brand_items[block_index]
+
+            if not isinstance(block, dict):
+                return None
+
+            flavors = items_get(block)
+
+            if flavor_index < 0 or flavor_index >= len(flavors):
+                return None
+
+            flavor_name = extract_flavor_name(flavors[flavor_index])
 
             return {
                 "key": key,
-                "name": f"{brand.get('title')} {block.get('nicotine')} — {flavor}",
+                "name": f"{brand.get('title')} {block.get('nicotine')} — {flavor_name}",
                 "price": float(block["price"]),
                 "photo": brand.get("photo"),
             }
 
         if kind == "flv":
+            if len(parts) != 5:
+                return None
+
             _, cat_key, brand_key, parent_idx, flavor_idx = parts
 
-            brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+            brand = brand_get(cat_key, brand_key)
+            parent_index = parse_idx(parent_idx)
+            flavor_index = parse_idx(flavor_idx)
 
-            parent = brand["items"][int(parent_idx)]
+            if not brand or parent_index is None or flavor_index is None:
+                return None
 
-            flavor = parent["items"][int(flavor_idx)]
+            brand_items = items_get(brand)
+
+            if parent_index < 0 or parent_index >= len(brand_items):
+                return None
+
+            parent = brand_items[parent_index]
+
+            if not isinstance(parent, dict):
+                return None
+
+            flavors = items_get(parent)
+
+            if flavor_index < 0 or flavor_index >= len(flavors):
+                return None
+
+            flavor = flavors[flavor_index]
 
             flavor_name = extract_flavor_name(flavor)
 
@@ -383,7 +542,7 @@ def resolve_item(key: str):
                 "key": key,
                 "name": f"{parent.get('name')} — {flavor_name}",
                 "price": float(parent["price"]),
-                "photo": brand.get("photo"),
+                "photo": parent.get("photo") or brand.get("photo"),
             }
 
     except Exception as e:
@@ -467,7 +626,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if context.user_data.get("reserve_key"):
-        key = context.user_data.pop("reserve_key")
+        key = context.user_data["reserve_key"]
 
         item = resolve_item(key)
 
@@ -487,17 +646,31 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💬 Контакт:\n{text}"
         )
 
-        for admin_id in ADMIN_IDS:
-            await send_message_safe(
-                context,
-                admin_id,
-                reservation_text,
+        delivered, _ = await notify_targets(context, ADMIN_IDS, reservation_text)
+
+        if not delivered:
+            await update.message.reply_text(
+                "❌ Не вдалося передати бронювання. Спробуйте ще раз трохи пізніше.",
+                reply_markup=kb_main(),
             )
+            return
+
+        context.user_data.pop("reserve_key", None)
 
         await update.message.reply_text(
             "✅ Бронювання передано адміну",
             reply_markup=kb_main(),
         )
+        return
+
+    if not has_city(context):
+        await start(update, context)
+        return
+
+    await update.message.reply_text(
+        "Я не очікував текст у цей момент. Скористайся кнопками нижче.",
+        reply_markup=kb_main(),
+    )
 
 # =========================================================
 # CATALOG
@@ -507,9 +680,15 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def catalog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await answer_callback(update)
 
+    categories = categories_get()
+
+    if not categories:
+        await show_text(update, "❌ Каталог тимчасово недоступний", kb_main())
+        return
+
     keyboard = []
 
-    for cat_key, cat in CATALOG["categories"].items():
+    for cat_key, cat in categories.items():
         keyboard.append([
             InlineKeyboardButton(
                 cat["title"],
@@ -536,12 +715,18 @@ async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     q = update.callback_query
 
-    cat_key = q.data.split(":")[1]
+    parts = q.data.split(":", 1)
 
-    cat = CATALOG["categories"].get(cat_key)
+    if len(parts) != 2:
+        await show_stale_callback(update, context)
+        return
+
+    cat_key = parts[1]
+
+    cat = category_get(cat_key)
 
     if not cat:
-        await show_text(update, "❌ Категорію не знайдено")
+        await show_stale_callback(update, context, "❌ Категорію не знайдено. Відкрив актуальне меню.")
         return
 
     keyboard = []
@@ -575,17 +760,23 @@ async def brand_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     q = update.callback_query
 
-    _, cat_key, brand_key = q.data.split(":")
+    parts = q.data.split(":")
 
-    try:
-        brand = CATALOG["categories"][cat_key]["brands"][brand_key]
-    except Exception:
-        await show_text(update, "❌ Бренд не знайдено")
+    if len(parts) != 3:
+        await show_stale_callback(update, context)
+        return
+
+    _, cat_key, brand_key = parts
+
+    brand = brand_get(cat_key, brand_key)
+
+    if not brand:
+        await show_stale_callback(update, context, "❌ Бренд не знайдено. Відкрив актуальне меню.")
         return
 
     keyboard = []
 
-    items = brand.get("items", [])
+    items = items_get(brand)
 
     for idx, item in enumerate(items):
 
@@ -663,15 +854,37 @@ async def nicotine_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     q = update.callback_query
 
-    _, cat_key, brand_key, block_idx = q.data.split(":")
+    parts = q.data.split(":")
 
-    brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+    if len(parts) != 4:
+        await show_stale_callback(update, context)
+        return
 
-    block = brand["items"][int(block_idx)]
+    _, cat_key, brand_key, block_idx = parts
+
+    brand = brand_get(cat_key, brand_key)
+    block_index = parse_idx(block_idx)
+
+    if not brand or block_index is None:
+        await show_stale_callback(update, context)
+        return
+
+    brand_items = items_get(brand)
+
+    if block_index < 0 or block_index >= len(brand_items):
+        await show_stale_callback(update, context)
+        return
+
+    block = brand_items[block_index]
+
+    if not isinstance(block, dict):
+        await show_stale_callback(update, context)
+        return
 
     keyboard = []
 
-    for idx, flavor in enumerate(block["items"]):
+    for idx, flavor in enumerate(items_get(block)):
+        flavor_name = extract_flavor_name(flavor)
         key = item_key(
             "nic",
             cat_key,
@@ -683,12 +896,12 @@ async def nicotine_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         st = stock_get(key)
 
         if st.get("in_stock", True):
-            label = f"{flavor} ✅"
+            label = f"{flavor_name} ✅"
             callback = f"add:{key}"
         else:
             eta = st.get("eta")
 
-            label = f"{flavor} ❌"
+            label = f"{flavor_name} ❌"
 
             if eta:
                 label += f" ({eta})"
@@ -720,15 +933,36 @@ async def flavors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     q = update.callback_query
 
-    _, cat_key, brand_key, parent_idx = q.data.split(":")
+    parts = q.data.split(":")
 
-    brand = CATALOG["categories"][cat_key]["brands"][brand_key]
+    if len(parts) != 4:
+        await show_stale_callback(update, context)
+        return
 
-    parent = brand["items"][int(parent_idx)]
+    _, cat_key, brand_key, parent_idx = parts
+
+    brand = brand_get(cat_key, brand_key)
+    parent_index = parse_idx(parent_idx)
+
+    if not brand or parent_index is None:
+        await show_stale_callback(update, context)
+        return
+
+    brand_items = items_get(brand)
+
+    if parent_index < 0 or parent_index >= len(brand_items):
+        await show_stale_callback(update, context)
+        return
+
+    parent = brand_items[parent_index]
+
+    if not isinstance(parent, dict):
+        await show_stale_callback(update, context)
+        return
 
     keyboard = []
 
-    for idx, flavor in enumerate(parent["items"]):
+    for idx, flavor in enumerate(items_get(parent)):
         flavor_name = extract_flavor_name(flavor)
 
         key = item_key(
@@ -921,87 +1155,127 @@ async def clear_cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await answer_callback(update)
 
-    user = update.effective_user
-
-    cart = cart_get(context)
-
-    if not cart:
-        await show_text(update, "🛒 Кошик порожній")
-        return
-
-    unavailable = []
-
-    for item in cart:
-        st = stock_get(item["key"])
-
-        if not st.get("in_stock", True):
-            unavailable.append(item["name"])
-
-    if unavailable:
+    if context.user_data.get("checkout_in_progress"):
         await show_text(
             update,
-            "❌ Деякі товари вже не в наявності:\n\n"
-            + "\n".join(f"• {x}" for x in unavailable),
-            kb_main(),
+            "⏳ Замовлення вже обробляється. Зачекай кілька секунд.",
         )
         return
 
-    city = get_city_title(context)
-    city_cfg = get_city_config(context)
+    context.user_data["checkout_in_progress"] = True
 
-    order_id = f"{user.id}-{int(datetime.now().timestamp())}"
+    user = update.effective_user
 
-    timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+    try:
+        cart = cart_get(context)
 
-    items_text = "\n".join(
-        f"• {item['name']} — {fmt_price(item['price'])}"
-        for item in cart
-    )
+        if not cart:
+            await show_text(update, "🛒 Кошик порожній")
+            return
 
-    order_text = (
-        "📦 НОВЕ ЗАМОВЛЕННЯ\n\n"
-        f"🆔 ID: {order_id}\n"
-        f"👤 {get_username(user)}\n"
-        f"📍 Місто: {city}\n\n"
-        f"🛒 Товари:\n{items_text}\n\n"
-        f"💰 Разом: {fmt_price(cart_total(cart))}\n"
-        f"🕒 {timestamp}"
-    )
+        unavailable = []
 
-    for admin_id in ADMIN_IDS:
-        await send_message_safe(
+        for item in cart:
+            st = stock_get(item["key"])
+
+            if not st.get("in_stock", True):
+                unavailable.append(item["name"])
+
+        if unavailable:
+            await show_text(
+                update,
+                "❌ Деякі товари вже не в наявності:\n\n"
+                + "\n".join(f"• {x}" for x in unavailable),
+                kb_main(),
+            )
+            return
+
+        city = get_city_title(context)
+        city_cfg = get_city_config(context)
+
+        order_id = f"{user.id}-{int(datetime.now().timestamp())}"
+
+        timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+        items_text = "\n".join(
+            f"• {item['name']} — {fmt_price(item['price'])}"
+            for item in cart
+        )
+
+        order_text = (
+            "📦 НОВЕ ЗАМОВЛЕННЯ\n\n"
+            f"🆔 ID: {order_id}\n"
+            f"👤 {get_username(user)}\n"
+            f"📍 Місто: {city}\n\n"
+            f"🛒 Товари:\n{items_text}\n\n"
+            f"💰 Разом: {fmt_price(cart_total(cart))}\n"
+            f"🕒 {timestamp}"
+        )
+
+        delivered_admins, failed_admins = await notify_targets(
             context,
-            admin_id,
+            ADMIN_IDS,
+            order_text,
+        )
+        courier_sent = await send_message_safe(
+            context,
+            city_cfg["courier_chat_id"],
             order_text,
         )
 
-    await send_message_safe(
-        context,
-        city_cfg["courier_chat_id"],
-        order_text,
-    )
+        if not delivered_admins and not courier_sent:
+            await show_text(
+                update,
+                "❌ Не вдалося передати замовлення. Кошик збережено, спробуй ще раз трохи пізніше.",
+                InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🛒 Кошик", callback_data="cart")],
+                    [InlineKeyboardButton("⬅ На головну", callback_data="main")],
+                ]),
+            )
+            return
 
-    save_order({
-        "order_id": order_id,
-        "city": city,
-        "user_id": user.id,
-        "items": cart,
-        "total": cart_total(cart),
-        "created_at": timestamp,
-    })
+        save_order({
+            "order_id": order_id,
+            "city": city,
+            "user_id": user.id,
+            "items": cart,
+            "total": cart_total(cart),
+            "created_at": timestamp,
+            "courier_sent": courier_sent,
+            "admin_delivered": delivered_admins,
+            "admin_failed": failed_admins,
+        })
 
-    context.user_data["cart"] = []
+        context.user_data["cart"] = []
 
-    await show_text(
-        update,
-        "✅ Дякуємо за замовлення\n\n"
-        f"Курʼєр звʼяжеться з вами:\n"
-        f"{city_cfg['courier_username']}",
-        InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
-            [InlineKeyboardButton("⬅ На головну", callback_data="main")],
-        ]),
-    )
+        if courier_sent:
+            success_text = (
+                "✅ Дякуємо за замовлення\n\n"
+                f"Курʼєр звʼяжеться з вами:\n"
+                f"{city_cfg['courier_username']}"
+            )
+        else:
+            success_text = (
+                "✅ Замовлення прийнято\n\n"
+                "Курʼєру не вдалося відправити повідомлення автоматично, "
+                "але адміністратор уже отримав замовлення і звʼяжеться з вами."
+            )
+
+        await show_text(
+            update,
+            success_text,
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("🛍 Каталог", callback_data="catalog")],
+                [InlineKeyboardButton("⬅ На головну", callback_data="main")],
+            ]),
+        )
+    finally:
+        context.user_data.pop("checkout_in_progress", None)
+
+
+async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await answer_callback(update)
+    await show_stale_callback(update, context)
 
 # =========================================================
 # MAIN
@@ -1036,6 +1310,7 @@ def main():
     app.add_handler(CallbackQueryHandler(remove_last_handler, pattern=r"^remove_last$"))
     app.add_handler(CallbackQueryHandler(clear_cart_handler, pattern=r"^clear_cart$"))
     app.add_handler(CallbackQueryHandler(checkout_handler, pattern=r"^checkout$"))
+    app.add_handler(CallbackQueryHandler(unknown_callback_handler))
 
     logging.info("Bot started")
 
